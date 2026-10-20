@@ -146,6 +146,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final isWatchlist = _destination == 1;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final isTvLayout = screenWidth >= 1000;
+    final pageHorizontalPadding = isTvLayout ? 36.0 : 16.0;
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 20,
@@ -186,7 +189,7 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+              padding: EdgeInsets.fromLTRB(pageHorizontalPadding, isTvLayout ? 20 : 8, pageHorizontalPadding, isTvLayout ? 20 : 14),
               child: TextField(
                 controller: _searchController,
                 textInputAction: TextInputAction.search,
@@ -211,7 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                   filled: true,
                   fillColor: const Color(0xFF171720),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 17),
+                  contentPadding: EdgeInsets.symmetric(vertical: isTvLayout ? 22 : 17),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(18),
                     borderSide: BorderSide.none,
@@ -231,7 +234,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              padding: EdgeInsets.fromLTRB(pageHorizontalPadding, 0, pageHorizontalPadding, isTvLayout ? 20 : 12),
               child: Row(
                 children: [
                   Expanded(
@@ -259,9 +262,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             SizedBox(
-              height: 42,
+              height: isTvLayout ? 54 : 42,
               child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: EdgeInsets.symmetric(horizontal: pageHorizontalPadding),
                 scrollDirection: Axis.horizontal,
                 children: [
                   _filterChip('All', Icons.grid_view_rounded),
@@ -420,10 +423,10 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
             sliver: SliverGrid(
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 230,
-                mainAxisSpacing: 18,
-                crossAxisSpacing: 13,
-                childAspectRatio: 0.57,
+                maxCrossAxisExtent: MediaQuery.sizeOf(context).width >= 1400 ? 280 : MediaQuery.sizeOf(context).width >= 1000 ? 250 : 230,
+                mainAxisSpacing: MediaQuery.sizeOf(context).width >= 1000 ? 24 : 18,
+                crossAxisSpacing: MediaQuery.sizeOf(context).width >= 1000 ? 20 : 13,
+                childAspectRatio: MediaQuery.sizeOf(context).width >= 1000 ? 0.68 : 0.57,
               ),
               delegate: SliverChildBuilderDelegate(
                 (context, index) => _animeCard(anime[index]),
@@ -438,14 +441,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _featuredCard(Anime anime) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      padding: EdgeInsets.fromLTRB(MediaQuery.sizeOf(context).width >= 1000 ? 36 : 16, 4, MediaQuery.sizeOf(context).width >= 1000 ? 36 : 16, 16),
       child: SizedBox(
-        height: 210,
+        height: MediaQuery.sizeOf(context).width >= 1000 ? 300 : 210,
         child: Material(
           color: const Color(0xFF20182E),
           borderRadius: BorderRadius.circular(24),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
+            autofocus: false,
+            focusColor: const Color(0x447C3AED),
             onTap: () => _openAnime(anime),
             child: Stack(
               fit: StackFit.expand,
@@ -478,7 +483,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: SizedBox(
-                      width: 225,
+                      width: MediaQuery.sizeOf(context).width >= 1000 ? 420 : 225,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.end,
@@ -505,7 +510,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 21,
+                              fontSize: MediaQuery.sizeOf(context).width >= 1000 ? 32 : 21,
                               height: 1.1,
                               fontWeight: FontWeight.w900,
                             ),
@@ -551,6 +556,8 @@ class _HomeScreenState extends State<HomeScreen> {
       borderRadius: BorderRadius.circular(17),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
+        autofocus: false,
+        focusColor: const Color(0x447C3AED),
         onTap: () => _openAnime(anime),
         borderRadius: BorderRadius.circular(17),
         child: Column(
