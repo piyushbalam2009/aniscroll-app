@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/mal_api.dart';
 import '../models/anime.dart';
-import 'player_screen.dart';
+import 'anime_details_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -185,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(14),
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute<void>(
-              builder: (_) => PlayerScreen(anime: anime),
+              builder: (_) => AnimeDetailsScreen(anime: anime),
             ),
           ),
           child: Column(
