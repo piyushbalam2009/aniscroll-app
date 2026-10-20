@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/mal_api.dart';
 import '../models/anime.dart';
 import 'anime_details_screen.dart';
+import 'advanced_search_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -21,9 +22,41 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _error;
   int _destination = 0;
   String _filter = 'All';
+  Map<String, dynamic>? _advancedFilters;
 
   List<Anime> get _visibleAnime {
-    final source = _destination == 1 ? _watchlist.values.toList() : _anime;
+    var source = (_destination == 1 ? _watchlist.values.toList() : _anime).toList();
+    final filters = _advancedFilters;
+    if (_destination == 0 && filters != null) {
+      final genre = filters['genre'] as String?;
+      final season = filters['season'] as String?;
+      final year = filters['year'] as int?;
+      final format = filters['format'] as String?;
+      if (genre != null) {
+        source = source.where((anime) => anime.genres.any((item) => item.toLowerCase() == genre.toLowerCase())).toList();
+      }
+      if (season != null) {
+        source = source.where((anime) => anime.season?.toLowerCase() == season).toList();
+      }
+      if (year != null) {
+        source = source.where((anime) => anime.startYear == year).toList();
+      }
+      if (format != null) {
+        source = source.where((anime) => anime.format?.toLowerCase() == format).toList();
+      }
+      switch (filters['sort'] as String? ?? 'Popularity') {
+        case 'Highest rated':
+          source.sort((a, b) => (b.score ?? 0).compareTo(a.score ?? 0));
+        case 'Lowest rated':
+          source.sort((a, b) => (a.score ?? 0).compareTo(b.score ?? 0));
+        case 'Newest first':
+          source.sort((a, b) => (b.startYear ?? 0).compareTo(a.startYear ?? 0));
+        case 'Oldest first':
+          source.sort((a, b) => (a.startYear ?? 9999).compareTo(b.startYear ?? 9999));
+        case 'Title A–Z':
+          source.sort((a, b) => a.englishTitle.toLowerCase().compareTo(b.englishTitle.toLowerCase()));
+      }
+    }
     switch (_filter) {
       case 'Top rated':
         return source.where((anime) => (anime.score ?? 0) >= 8).toList()
@@ -58,9 +91,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _searchMode = false;
       _destination = 0;
       _filter = 'All';
+      _advancedFilters = null;
+      _searchController.clear();
     });
     try {
-      final results = await _api.getTopAnime();
+      final results = await _api.getTopAnime(limit: 100);
       if (!mounted) return;
       setState(() {
         _anime = results;
@@ -87,9 +122,45 @@ class _HomeScreenState extends State<HomeScreen> {
       _searchMode = true;
       _destination = 0;
       _filter = 'All';
+      _advancedFilters = null;
     });
     try {
-      final results = await _api.searchAnime(query);
+      final results = await _api.searchAnime(query, limit: 100);
+      if (!mounted) return;
+      setState(() {
+        _anime = results;
+        _loading = false;
+      });
+    } on Exception catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.toString().replaceFirst('Exception: ', '');
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _openAdvancedSearch() async {
+    final filters = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute<Map<String, dynamic>>(
+        builder: (_) => const AdvancedSearchScreen(),
+      ),
+    );
+    if (filters == null || !mounted) return;
+    final query = filters['query'] as String? ?? '';
+    setState(() {
+      _advancedFilters = filters;
+      _searchMode = true;
+      _destination = 0;
+      _filter = 'All';
+      _loading = true;
+      _error = null;
+      _searchController.text = query;
+    });
+    try {
+      final results = query.isEmpty
+          ? await _api.getTopAnime(limit: 100)
+          : await _api.searchAnime(query, limit: 100);
       if (!mounted) return;
       setState(() {
         _anime = results;
@@ -259,6 +330,20 @@ class _HomeScreenState extends State<HomeScreen> {
                           ?.copyWith(color: Colors.white60),
                     ),
                 ],
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(pageHorizontalPadding, 0, pageHorizontalPadding, 10),
+              child: OutlinedButton.icon(
+                onPressed: _openAdvancedSearch,
+                icon: const Icon(Icons.tune_rounded),
+                label: const Text('Advanced search · Genre · Season · Year · Format'),
+                style: OutlinedButton.styleFrom(
+                  alignment: Alignment.centerLeft,
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: isTvLayout ? 18 : 12),
+                  foregroundColor: const Color(0xFFD8C5FF),
+                  side: const BorderSide(color: Color(0xFF44365F)),
+                ),
               ),
             ),
             SizedBox(
