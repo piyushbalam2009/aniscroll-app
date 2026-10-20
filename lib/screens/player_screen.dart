@@ -24,7 +24,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   int get _episodeCount => widget.anime.episodeCount ?? 0;
   bool get _useEpisodeGrid => _episodeCount > 50;
-  int get _rangeEnd => (_rangeStart + 99).clamp(1, _episodeCount);
+  int get _rangeEnd => (_rangeStart + 99).clamp(1, _episodeCount).toInt();
 
   Uri get _playerUri => Uri.https(
         'zokoanime.video',
@@ -261,7 +261,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     border: OutlineInputBorder(),
                   ),
                   items: ranges.map((start) {
-                    final finish = (start + 99).clamp(1, _episodeCount);
+                    final finish = (start + 99).clamp(1, _episodeCount).toInt();
                     return DropdownMenuItem<int>(
                       value: start,
                       child: Text(
