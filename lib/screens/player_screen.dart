@@ -408,20 +408,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    const Text('Episode'),
-                    IconButton(
-                      tooltip: 'Previous episode',
-                      onPressed: _episode > 1 ? () => _changeEpisode(-1) : null,
-                      icon: const Icon(Icons.remove_circle_outline),
-                    ),
-                    Text('$_episode', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    IconButton(
-                      tooltip: 'Next episode',
-                      onPressed: _episodeCount > 0 && _episode >= _episodeCount
-                          ? null
-                          : () => _changeEpisode(1),
-                      icon: const Icon(Icons.add_circle_outline),
-                    ),
                     SegmentedButton<String>(
                       segments: const [
                         ButtonSegment(value: 'sub', label: Text('Sub')),
