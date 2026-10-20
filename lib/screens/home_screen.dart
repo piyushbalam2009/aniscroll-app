@@ -140,6 +140,40 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _openSearch() async {
+    final queryController = TextEditingController(text: _searchController.text);
+    final query = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Search anime'),
+        content: TextField(
+          controller: queryController,
+          autofocus: true,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value.trim()),
+          decoration: const InputDecoration(
+            hintText: 'Search anime in English',
+            prefixIcon: Icon(Icons.search_rounded),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(queryController.text.trim()),
+            child: const Text('Search'),
+          ),
+        ],
+      ),
+    );
+    queryController.dispose();
+    if (query == null || !mounted) return;
+    _searchController.text = query;
+    await _search();
+  }
+
   Future<void> _openAdvancedSearch() async {
     final filters = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute<Map<String, dynamic>>(
@@ -248,6 +282,16 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Search anime',
+            onPressed: _openSearch,
+            icon: const Icon(Icons.search_rounded),
+          ),
+          IconButton(
+            tooltip: 'Advanced search',
+            onPressed: _openAdvancedSearch,
+            icon: const Icon(Icons.tune_rounded),
+          ),
+          IconButton(
             tooltip: 'Refresh anime',
             onPressed: _loading ? null : _loadTopAnime,
             icon: const Icon(Icons.refresh_rounded),
@@ -259,51 +303,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(pageHorizontalPadding, isTvLayout ? 20 : 8, pageHorizontalPadding, isTvLayout ? 20 : 14),
-              child: TextField(
-                controller: _searchController,
-                textInputAction: TextInputAction.search,
-                onSubmitted: (_) => _search(),
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: 'Search anime in English',
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  suffixIcon: _searchController.text.isEmpty
-                      ? IconButton(
-                          tooltip: 'Search',
-                          onPressed: _search,
-                          icon: const Icon(Icons.arrow_forward_rounded),
-                        )
-                      : IconButton(
-                          tooltip: 'Clear search',
-                          onPressed: () {
-                            _searchController.clear();
-                            _loadTopAnime();
-                          },
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                  filled: true,
-                  fillColor: const Color(0xFF171720),
-                  contentPadding: EdgeInsets.symmetric(vertical: isTvLayout ? 22 : 17),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(18),
-                    borderSide: BorderSide.none,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(18),
-                    borderSide: const BorderSide(color: Color(0xFF292638)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(18),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF8B5CF6),
-                      width: 1.5,
-                    ),
-                  ),
-                ),
-              ),
-            ),
             Padding(
               padding: EdgeInsets.fromLTRB(pageHorizontalPadding, 0, pageHorizontalPadding, isTvLayout ? 20 : 12),
               child: Row(
