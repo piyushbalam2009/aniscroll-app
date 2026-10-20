@@ -141,37 +141,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openSearch() async {
-    final queryController = TextEditingController(text: _searchController.text);
-    final query = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Search anime'),
-        content: TextField(
-          controller: queryController,
-          autofocus: true,
-          textInputAction: TextInputAction.search,
-          onSubmitted: (value) => Navigator.of(dialogContext).pop(value.trim()),
-          decoration: const InputDecoration(
-            hintText: 'Search anime in English',
-            prefixIcon: Icon(Icons.search_rounded),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(queryController.text.trim()),
-            child: const Text('Search'),
-          ),
-        ],
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const NormalSearchScreen(),
       ),
     );
-    queryController.dispose();
-    if (query == null || !mounted) return;
-    _searchController.text = query;
-    await _search();
   }
 
   Future<void> _openAdvancedSearch() async {
@@ -836,3 +810,226 @@ class _HomeScreenState extends State<HomeScreen> {
         child: const Icon(Icons.movie_outlined, size: 44),
       );
 }
+
+class NormalSearchScreen extends StatefulWidget {
+  const NormalSearchScreen({super.key});
+
+  @override
+  State<NormalSearchScreen> createState() => _NormalSearchScreenState();
+}
+
+class _NormalSearchScreenState extends State<NormalSearchScreen> {
+  final _api = MalApi();
+  final _controller = TextEditingController();
+  List<Anime> _results = const [];
+  bool _loading = false;
+  String? _error;
+  int _requestVersion = 0;
+
+  @override
+  void dispose() {
+    _requestVersion++;
+    _controller.dispose();
+    _api.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search() async {
+    final query = _controller.text.trim();
+    if (query.isEmpty) {
+      setState(() {
+        _results = const [];
+        _error = null;
+        _loading = false;
+      });
+      return;
+    }
+
+    final requestVersion = ++_requestVersion;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final results = await _api.searchAnime(query, limit: 100);
+      if (!mounted || requestVersion != _requestVersion) return;
+      setState(() {
+        _results = results;
+        _loading = false;
+      });
+    } on Exception catch (error) {
+      if (!mounted || requestVersion != _requestVersion) return;
+      setState(() {
+        _error = error.toString().replaceFirst('Exception: ', '');
+        _loading = false;
+      });
+    }
+  }
+
+  void _openAnime(Anime anime) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AnimeDetailsScreen(anime: anime),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Search anime')),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              child: TextField(
+                controller: _controller,
+                autofocus: true,
+                textInputAction: TextInputAction.search,
+                onSubmitted: (_) => _search(),
+                decoration: InputDecoration(
+                  hintText: 'Search anime in English',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: IconButton(
+                    tooltip: 'Search',
+                    onPressed: _search,
+                    icon: const Icon(Icons.arrow_forward_rounded),
+                  ),
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.cloud_off_rounded, size: 44),
+                                const SizedBox(height: 12),
+                                Text(_error!, textAlign: TextAlign.center),
+                                const SizedBox(height: 12),
+                                FilledButton(
+                                  onPressed: _search,
+                                  child: const Text('Try again'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : _results.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Text(
+                                  _controller.text.trim().isEmpty
+                                      ? 'Search by an English anime title.'
+                                      : 'No anime found. Try another title.',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.white70),
+                                ),
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                              itemCount: _results.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (context, index) {
+                                final anime = _results[index];
+                                return Material(
+                                  color: const Color(0xFF17151E),
+                                  borderRadius: BorderRadius.circular(14),
+                                  clipBehavior: Clip.antiAlias,
+                                  child: InkWell(
+                                    onTap: () => _openAnime(anime),
+                                    child: SizedBox(
+                                      height: 132,
+                                      child: Row(
+                                        children: [
+                                          SizedBox(
+                                            width: 88,
+                                            height: double.infinity,
+                                            child: anime.imageUrl == null
+                                                ? const ColoredBox(
+                                                    color: Color(0xFF20202B),
+                                                    child: Icon(Icons.movie_outlined),
+                                                  )
+                                                : Image.network(
+                                                    anime.imageUrl!,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (_, __, ___) =>
+                                                        const ColoredBox(
+                                                      color: Color(0xFF20202B),
+                                                      child: Icon(Icons.movie_outlined),
+                                                    ),
+                                                  ),
+                                          ),
+                                          Expanded(
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(12),
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    anime.englishTitle,
+                                                    maxLines: 2,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: const TextStyle(
+                                                      fontWeight: FontWeight.w800,
+                                                      fontSize: 15,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 7),
+                                                  Text(
+                                                    [
+                                                      if (anime.startYear != null)
+                                                        '${anime.startYear}',
+                                                      if (anime.episodeCount != null)
+                                                        '${anime.episodeCount} episodes',
+                                                      if (anime.score != null)
+                                                        '★ ${anime.score!.toStringAsFixed(1)}',
+                                                    ].join(' · '),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: const TextStyle(
+                                                      color: Colors.white60,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 7),
+                                                  const Text(
+                                                    'View details  ›',
+                                                    style: TextStyle(
+                                                      color: Color(0xFFC4B5FD),
+                                                      fontWeight: FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
