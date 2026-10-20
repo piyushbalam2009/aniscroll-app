@@ -369,73 +369,85 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(pageHorizontalPadding, 0, pageHorizontalPadding, isTvLayout ? 20 : 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      isWatchlist
-                          ? 'My List'
-                          : _searchMode
-                              ? 'Search results'
-                              : 'Discover anime',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.4,
-                          ),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  pageHorizontalPadding, 0, pageHorizontalPadding,
+                  isTvLayout ? 20 : 12,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        isWatchlist
+                            ? 'My List'
+                            : _searchMode
+                                ? 'Search results'
+                                : 'Discover anime',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -0.4,
+                            ),
+                      ),
                     ),
-                  ),
-                  if (!isWatchlist)
-                    Text(
-                      '${_anime.length} titles',
-                      style: Theme.of(context)
-                          .textTheme
-                          .labelMedium
-                          ?.copyWith(color: Colors.white60),
-                    ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(pageHorizontalPadding, 0, pageHorizontalPadding, 10),
-              child: OutlinedButton.icon(
-                onPressed: _openAdvancedSearch,
-                icon: const Icon(Icons.tune_rounded),
-                label: const Text('Advanced search · Genre · Season · Year · Format'),
-                style: OutlinedButton.styleFrom(
-                  alignment: Alignment.centerLeft,
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: isTvLayout ? 18 : 12),
-                  foregroundColor: const Color(0xFFD8C5FF),
-                  side: const BorderSide(color: Color(0xFF44365F)),
+                    if (!isWatchlist)
+                      Text(
+                        '${_anime.length} titles',
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelMedium
+                            ?.copyWith(color: Colors.white60),
+                      ),
+                  ],
                 ),
               ),
-            ),
-            SizedBox(
-              height: isTvLayout ? 54 : 42,
-              child: ListView(
-                padding: EdgeInsets.symmetric(horizontal: pageHorizontalPadding),
-                scrollDirection: Axis.horizontal,
-                children: [
-                  _filterChip('All', Icons.grid_view_rounded),
-                  const SizedBox(width: 8),
-                  _filterChip('Top rated', Icons.local_fire_department_rounded),
-                  const SizedBox(width: 8),
-                  _filterChip('Short series', Icons.bolt_rounded),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: _buildContent(),
-            ),
-          ],
+              if (!isWatchlist)
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    pageHorizontalPadding, 0, pageHorizontalPadding, 10,
+                  ),
+                  child: OutlinedButton.icon(
+                    onPressed: _openAdvancedSearch,
+                    icon: const Icon(Icons.tune_rounded),
+                    label: const Text(
+                      'Advanced search · Genre · Season · Year · Format',
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      alignment: Alignment.centerLeft,
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16, vertical: isTvLayout ? 18 : 12,
+                      ),
+                      foregroundColor: const Color(0xFFD8C5FF),
+                      side: const BorderSide(color: Color(0xFF44365F)),
+                    ),
+                  ),
+                ),
+              if (!isWatchlist)
+                SizedBox(
+                  height: isTvLayout ? 54 : 42,
+                  child: ListView(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: pageHorizontalPadding,
+                    ),
+                    scrollDirection: Axis.horizontal,
+                    children: [
+                      _filterChip('All', Icons.grid_view_rounded),
+                      const SizedBox(width: 8),
+                      _filterChip('Top rated', Icons.local_fire_department_rounded),
+                      const SizedBox(width: 8),
+                      _filterChip('Short series', Icons.bolt_rounded),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 10),
+              _buildContent(),
+            ],
+          ),
         ),
-      ),
-    );
+      ),);
   }
 
   Widget _filterChip(String label, IconData icon) {
@@ -461,107 +473,95 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildContent() {
     if (_loading && _destination == 0) {
-      return const Center(
-        key: ValueKey('loading'),
-        child: CircularProgressIndicator(),
+      return const SizedBox(
+        height: 240,
+        child: Center(child: CircularProgressIndicator()),
       );
     }
     if (_error != null && _destination == 0) {
-      return Center(
-        key: const ValueKey('error'),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.cloud_off_rounded, size: 46),
-              const SizedBox(height: 12),
-              Text(_error!, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: _searchMode ? _search : _loadTopAnime,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Try again'),
-              ),
-            ],
-          ),
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_rounded, size: 46),
+            const SizedBox(height: 12),
+            Text(_error!, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _searchMode ? _search : _loadTopAnime,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Try again'),
+            ),
+          ],
         ),
       );
     }
-
     final anime = _visibleAnime;
     if (anime.isEmpty) {
-      return Center(
-        key: const ValueKey('empty'),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                _destination == 1
-                    ? Icons.bookmark_add_outlined
-                    : Icons.search_off_rounded,
-                size: 54,
-                color: Colors.white54,
+      return Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _destination == 1
+                  ? Icons.bookmark_add_outlined
+                  : Icons.search_off_rounded,
+              size: 54,
+              color: Colors.white54,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              _destination == 1
+                  ? 'Your list is waiting'
+                  : 'No matching anime found',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _destination == 1
+                  ? 'Tap the bookmark on any anime poster to save it here.'
+                  : 'Try another filter or search using an English title.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white60),
+            ),
+            if (_destination == 1) ...[
+              const SizedBox(height: 18),
+              FilledButton.icon(
+                onPressed: () => setState(() => _destination = 0),
+                icon: const Icon(Icons.explore_rounded),
+                label: const Text('Explore anime'),
               ),
-              const SizedBox(height: 14),
-              Text(
-                _destination == 1
-                    ? 'Your list is waiting'
-                    : 'No matching anime found',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                _destination == 1
-                    ? 'Tap the bookmark on any anime poster to save it here.'
-                    : 'Try another filter or search using an English title.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white60),
-              ),
-              if (_destination == 1) ...[
-                const SizedBox(height: 18),
-                FilledButton.icon(
-                  onPressed: () => setState(() => _destination = 0),
-                  icon: const Icon(Icons.explore_rounded),
-                  label: const Text('Explore anime'),
-                ),
-              ],
             ],
-          ),
+          ],
         ),
       );
     }
-
     final showHero = _destination == 0 && !_searchMode && _filter == 'All';
-    return RefreshIndicator(
-      onRefresh: _destination == 1 ? () async {} : _loadTopAnime,
-      color: const Color(0xFFB794F6),
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          if (showHero && anime.isNotEmpty)
-            SliverToBoxAdapter(child: _featuredCard(anime.first)),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-            sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: MediaQuery.sizeOf(context).width >= 1400 ? 280 : MediaQuery.sizeOf(context).width >= 1000 ? 250 : 230,
-                mainAxisSpacing: MediaQuery.sizeOf(context).width >= 1000 ? 24 : 18,
-                crossAxisSpacing: MediaQuery.sizeOf(context).width >= 1000 ? 20 : 13,
-                childAspectRatio: MediaQuery.sizeOf(context).width >= 1000 ? 0.68 : 0.57,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) => _animeCard(anime[index]),
-                childCount: anime.length,
-              ),
+    final width = MediaQuery.sizeOf(context).width;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showHero && anime.isNotEmpty) _featuredCard(anime.first),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+          child: GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: width >= 1400 ? 280 : width >= 1000 ? 250 : 230,
+              mainAxisSpacing: width >= 1000 ? 24 : 18,
+              crossAxisSpacing: width >= 1000 ? 20 : 13,
+              childAspectRatio: width >= 1000 ? 0.68 : 0.57,
             ),
+            itemCount: anime.length,
+            itemBuilder: (context, index) => _animeCard(anime[index]),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
