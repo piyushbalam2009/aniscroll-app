@@ -447,7 +447,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-      ),);
+      ),
+    );
   }
 
   Widget _filterChip(String label, IconData icon) {
