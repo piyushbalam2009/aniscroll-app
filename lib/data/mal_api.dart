@@ -13,7 +13,7 @@ class MalApi {
   final http.Client _client;
 
   static const _fields =
-      'alternative_titles,main_picture,synopsis,mean,num_episodes,genres,status';
+      'alternative_titles,main_picture,synopsis,mean,num_episodes,genres,status,start_date,start_season,media_type';
 
   Future<List<Anime>> getTopAnime({int limit = 20}) async {
     _requireClientId();
@@ -27,7 +27,7 @@ class MalApi {
     return _getAnimeList(uri);
   }
 
-  Future<List<Anime>> searchAnime(String query, {int limit = 20}) async {
+  Future<List<Anime>> searchAnime(String query, {int limit = 100}) async {
     _requireClientId();
     final trimmed = query.trim();
     if (trimmed.isEmpty) return const [];
