@@ -176,7 +176,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _detectAvailableTracks();
   }
 
-  Future<void> _changeEpisode(int delta) => _selectEpisode(_episode + delta);
 
   Future<void> _changeTrack(String track) async {
     if (track == _track) return;
