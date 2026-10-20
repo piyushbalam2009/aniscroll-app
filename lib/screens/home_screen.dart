@@ -422,7 +422,7 @@ class _HomeScreenState extends State<HomeScreen> {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
             sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: MediaQuery.sizeOf(context).width >= 1400 ? 280 : MediaQuery.sizeOf(context).width >= 1000 ? 250 : 230,
                 mainAxisSpacing: MediaQuery.sizeOf(context).width >= 1000 ? 24 : 18,
                 crossAxisSpacing: MediaQuery.sizeOf(context).width >= 1000 ? 20 : 13,
@@ -666,9 +666,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.78),
+        color: Colors.black.withValues(alpha: 0.78),
         borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: Colors.white.withOpacity(0.12)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -688,7 +688,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _watchlistButton(Anime anime, {bool compact = false}) {
     final saved = _watchlist.containsKey(anime.id);
     return Material(
-      color: Colors.black.withOpacity(0.68),
+      color: Colors.black.withValues(alpha: 0.68),
       shape: const CircleBorder(),
       child: IconButton(
         visualDensity: VisualDensity.compact,
