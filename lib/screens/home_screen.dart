@@ -332,6 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
         centerTitle: true,
         titleSpacing: 0,
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               width: 34,
