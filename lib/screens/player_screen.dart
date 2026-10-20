@@ -253,7 +253,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: DropdownButtonFormField<int>(
-                  value: _rangeStart,
+                  initialValue: _rangeStart,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     isDense: true,
