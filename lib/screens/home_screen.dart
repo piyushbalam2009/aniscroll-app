@@ -509,7 +509,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             anime.englishTitle,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: MediaQuery.sizeOf(context).width >= 1000 ? 32 : 21,
                               height: 1.1,
                               fontWeight: FontWeight.w900,
