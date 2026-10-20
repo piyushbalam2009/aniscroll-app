@@ -366,12 +366,6 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: _openAdvancedSearch,
             icon: const Icon(Icons.tune_rounded),
           ),
-          IconButton(
-            tooltip: 'Refresh anime',
-            onPressed: _loading ? null : _loadTopAnime,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-          const SizedBox(width: 4),
         ],
       ),
       body: SafeArea(
@@ -436,36 +430,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 10),
             Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 240),
-                child: _buildContent(
-                  key: ValueKey('$_destination-$_filter-$_loading-$_error'),
-                ),
-              ),
+              child: _buildContent(),
             ),
           ],
         ),
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _destination,
-        onDestinationSelected: (index) {
-          setState(() {
-            _destination = index;
-            _filter = 'All';
-          });
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.explore_outlined),
-            selectedIcon: Icon(Icons.explore_rounded),
-            label: 'Discover',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.bookmark_border_rounded),
-            selectedIcon: Icon(Icons.bookmark_rounded),
-            label: 'My List',
-          ),
-        ],
       ),
     );
   }
@@ -491,7 +459,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildContent({required Key key}) {
+  Widget _buildContent() {
     if (_loading && _destination == 0) {
       return const Center(
         key: ValueKey('loading'),
@@ -570,7 +538,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final showHero = _destination == 0 && !_searchMode && _filter == 'All';
     return RefreshIndicator(
-      key: key,
       onRefresh: _destination == 1 ? () async {} : _loadTopAnime,
       color: const Color(0xFFB794F6),
       child: CustomScrollView(
