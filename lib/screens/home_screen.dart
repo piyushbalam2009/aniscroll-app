@@ -821,6 +821,7 @@ class NormalSearchScreen extends StatefulWidget {
 class _NormalSearchScreenState extends State<NormalSearchScreen> {
   final _api = MalApi();
   final _controller = TextEditingController();
+  final _searchFocus = FocusNode();
   List<Anime> _results = const [];
   bool _loading = false;
   String? _error;
@@ -830,6 +831,7 @@ class _NormalSearchScreenState extends State<NormalSearchScreen> {
   void dispose() {
     _requestVersion++;
     _controller.dispose();
+    _searchFocus.dispose();
     _api.dispose();
     super.dispose();
   }
@@ -842,6 +844,7 @@ class _NormalSearchScreenState extends State<NormalSearchScreen> {
         _error = null;
         _loading = false;
       });
+      _searchFocus.requestFocus();
       return;
     }
 
@@ -875,158 +878,231 @@ class _NormalSearchScreenState extends State<NormalSearchScreen> {
     );
   }
 
+  Widget _poster(Anime anime) {
+    if (anime.imageUrl == null) {
+      return const ColoredBox(
+        color: Color(0xFF20202B),
+        child: Center(child: Icon(Icons.movie_outlined, size: 38)),
+      );
+    }
+    return Image.network(
+      anime.imageUrl!,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => const ColoredBox(
+        color: Color(0xFF20202B),
+        child: Center(child: Icon(Icons.movie_outlined, size: 38)),
+      ),
+    );
+  }
+
+  String _metadata(Anime anime) => [
+        if (anime.startYear != null) '${anime.startYear}',
+        if (anime.episodeCount != null) '${anime.episodeCount} episodes',
+        if (anime.score != null) '★ ${anime.score!.toStringAsFixed(1)}',
+      ].join(' · ');
+
+  Widget _mobileResult(Anime anime) {
+    return Material(
+      color: const Color(0xFF17151E),
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _openAnime(anime),
+        child: SizedBox(
+          height: 132,
+          child: Row(
+            children: [
+              SizedBox(width: 88, height: double.infinity, child: _poster(anime)),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        anime.englishTitle,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 7),
+                      Text(
+                        _metadata(anime),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white60, fontSize: 12),
+                      ),
+                      const SizedBox(height: 7),
+                      const Text(
+                        'View details  ›',
+                        style: TextStyle(
+                          color: Color(0xFFC4B5FD),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _tvResult(Anime anime) {
+    return Material(
+      color: const Color(0xFF17151E),
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        autofocus: false,
+        focusColor: const Color(0x557C3AED),
+        onTap: () => _openAnime(anime),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: SizedBox(width: double.infinity, child: _poster(anime))),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    anime.englishTitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _metadata(anime),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white60, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResults(double width) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 44),
+              const SizedBox(height: 12),
+              Text(_error!, textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              FilledButton(onPressed: _search, child: const Text('Try again')),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_results.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.search_rounded, size: 48, color: Colors.white54),
+              const SizedBox(height: 12),
+              Text(
+                _controller.text.trim().isEmpty
+                    ? 'Search by an English anime title.'
+                    : 'No anime found. Try another title.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (width >= 800) {
+      final columns = width >= 1400 ? 6 : width >= 1100 ? 5 : 4;
+      return GridView.builder(
+        padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          crossAxisSpacing: 18,
+          mainAxisSpacing: 20,
+          childAspectRatio: 0.64,
+        ),
+        itemCount: _results.length,
+        itemBuilder: (context, index) => _tvResult(_results[index]),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      itemCount: _results.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, index) => _mobileResult(_results[index]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Search anime')),
+      appBar: AppBar(
+        title: const Text('Search anime'),
+        centerTitle: MediaQuery.sizeOf(context).width >= 800,
+      ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-              child: TextField(
-                controller: _controller,
-                autofocus: true,
-                textInputAction: TextInputAction.search,
-                onSubmitted: (_) => _search(),
-                decoration: InputDecoration(
-                  hintText: 'Search anime in English',
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  suffixIcon: IconButton(
-                    tooltip: 'Search',
-                    onPressed: _search,
-                    icon: const Icon(Icons.arrow_forward_rounded),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isTv = constraints.maxWidth >= 800;
+            return Column(
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    isTv ? 28 : 16, 12, isTv ? 28 : 16, 12,
                   ),
-                  border: const OutlineInputBorder(),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1000),
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _searchFocus,
+                      autofocus: true,
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (_) => _search(),
+                      decoration: InputDecoration(
+                        hintText: 'Search anime by English title',
+                        prefixIcon: const Icon(Icons.search_rounded),
+                        suffixIcon: IconButton(
+                          tooltip: 'Search',
+                          onPressed: _search,
+                          icon: const Icon(Icons.arrow_forward_rounded),
+                        ),
+                        border: const OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error != null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.cloud_off_rounded, size: 44),
-                                const SizedBox(height: 12),
-                                Text(_error!, textAlign: TextAlign.center),
-                                const SizedBox(height: 12),
-                                FilledButton(
-                                  onPressed: _search,
-                                  child: const Text('Try again'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : _results.isEmpty
-                          ? Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(24),
-                                child: Text(
-                                  _controller.text.trim().isEmpty
-                                      ? 'Search by an English anime title.'
-                                      : 'No anime found. Try another title.',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(color: Colors.white70),
-                                ),
-                              ),
-                            )
-                          : ListView.separated(
-                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                              itemCount: _results.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(height: 10),
-                              itemBuilder: (context, index) {
-                                final anime = _results[index];
-                                return Material(
-                                  color: const Color(0xFF17151E),
-                                  borderRadius: BorderRadius.circular(14),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: InkWell(
-                                    onTap: () => _openAnime(anime),
-                                    child: SizedBox(
-                                      height: 132,
-                                      child: Row(
-                                        children: [
-                                          SizedBox(
-                                            width: 88,
-                                            height: double.infinity,
-                                            child: anime.imageUrl == null
-                                                ? const ColoredBox(
-                                                    color: Color(0xFF20202B),
-                                                    child: Icon(Icons.movie_outlined),
-                                                  )
-                                                : Image.network(
-                                                    anime.imageUrl!,
-                                                    fit: BoxFit.cover,
-                                                    errorBuilder: (_, __, ___) =>
-                                                        const ColoredBox(
-                                                      color: Color(0xFF20202B),
-                                                      child: Icon(Icons.movie_outlined),
-                                                    ),
-                                                  ),
-                                          ),
-                                          Expanded(
-                                            child: Padding(
-                                              padding: const EdgeInsets.all(12),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                mainAxisAlignment:
-                                                    MainAxisAlignment.center,
-                                                children: [
-                                                  Text(
-                                                    anime.englishTitle,
-                                                    maxLines: 2,
-                                                    overflow: TextOverflow.ellipsis,
-                                                    style: const TextStyle(
-                                                      fontWeight: FontWeight.w800,
-                                                      fontSize: 15,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 7),
-                                                  Text(
-                                                    [
-                                                      if (anime.startYear != null)
-                                                        '${anime.startYear}',
-                                                      if (anime.episodeCount != null)
-                                                        '${anime.episodeCount} episodes',
-                                                      if (anime.score != null)
-                                                        '★ ${anime.score!.toStringAsFixed(1)}',
-                                                    ].join(' · '),
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                    style: const TextStyle(
-                                                      color: Colors.white60,
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 7),
-                                                  const Text(
-                                                    'View details  ›',
-                                                    style: TextStyle(
-                                                      color: Color(0xFFC4B5FD),
-                                                      fontWeight: FontWeight.w700,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-            ),
-          ],
+                Expanded(child: _buildResults(constraints.maxWidth)),
+              ],
+            );
+          },
         ),
       ),
     );
