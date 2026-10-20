@@ -255,8 +255,82 @@ class _HomeScreenState extends State<HomeScreen> {
     final isTvLayout = screenWidth >= 1000;
     final pageHorizontalPadding = isTvLayout ? 36.0 : 16.0;
     return Scaffold(
+      drawer: Drawer(
+        backgroundColor: const Color(0xFF17151E),
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 18),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFB794F6), Color(0xFF7C3AED)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      child: const Icon(Icons.play_arrow_rounded,
+                          color: Colors.white, size: 30),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'AniScroll',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 23,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: Color(0xFF302B3D)),
+              ListTile(
+                leading: const Icon(Icons.explore_rounded),
+                title: const Text('Discover'),
+                selected: _destination == 0,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  setState(() {
+                    _destination = 0;
+                    _filter = 'All';
+                  });
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.bookmark_border_rounded),
+                title: const Text('My List'),
+                selected: _destination == 1,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  setState(() {
+                    _destination = 1;
+                    _filter = 'All';
+                  });
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.tune_rounded),
+                title: const Text('Advanced Search'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _openAdvancedSearch();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
       appBar: AppBar(
-        titleSpacing: 20,
+        centerTitle: true,
+        titleSpacing: 0,
         title: Row(
           children: [
             Container(
