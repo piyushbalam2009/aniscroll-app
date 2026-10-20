@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../models/anime.dart';
@@ -21,6 +24,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   int _episode = 1;
   int _rangeStart = 1;
   String _track = 'sub';
+  Set<String> _availableTracks = {'sub'};
+  bool _checkingTracks = true;
+  int _trackCheckToken = 0;
 
   int get _episodeCount => widget.anime.episodeCount ?? 0;
   bool get _useEpisodeGrid => _episodeCount > 50;
@@ -42,6 +48,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     _configureWebView();
+    _detectAvailableTracks();
   }
 
   @override
@@ -88,6 +95,66 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ..loadRequest(_playerUri);
   }
 
+
+  Future<bool> _probeTrack(String track) async {
+    final uri = Uri.https(
+      'zokoanime.video',
+      '/stream/mal/${widget.anime.id}/$_episode/$track',
+      const {'color': '8b5cf6'},
+    );
+    try {
+      final response = await http.get(
+        uri,
+        headers: const {'Accept': 'text/html'},
+      ).timeout(const Duration(seconds: 5));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return false;
+      }
+      final body = utf8.decode(response.bodyBytes, allowMalformed: true)
+          .toLowerCase();
+      const unavailableMarkers = [
+        'episode not found',
+        'no episode found',
+        'stream not available',
+        'not available in this language',
+        'dub not available',
+        'sub not available',
+        'no sources found',
+        'content unavailable',
+      ];
+      if (unavailableMarkers.any(body.contains)) return false;
+      return body.contains('video') ||
+          body.contains('player') ||
+          body.contains('hls') ||
+          body.contains('window.__p');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _detectAvailableTracks() async {
+    final token = ++_trackCheckToken;
+    if (mounted) setState(() => _checkingTracks = true);
+    final results = await Future.wait([
+      _probeTrack('sub'),
+      _probeTrack('dub'),
+    ]);
+    if (!mounted || token != _trackCheckToken) return;
+    final available = <String>{
+      if (results[0]) 'sub',
+      if (results[1]) 'dub',
+    };
+    if (available.isEmpty) available.add(_track);
+    final selected = available.contains(_track) ? _track : available.first;
+    final trackChanged = selected != _track;
+    setState(() {
+      _availableTracks = available;
+      _track = selected;
+      _checkingTracks = false;
+    });
+    if (trackChanged) await _loadPlayer();
+  }
+
   Future<void> _loadPlayer() async {
     setState(() {
       _loading = true;
@@ -106,6 +173,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     });
     await _loadPlayer();
+    await _detectAvailableTracks();
   }
 
   Future<void> _changeEpisode(int delta) => _selectEpisode(_episode + delta);
@@ -408,14 +476,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(value: 'sub', label: Text('Sub')),
-                        ButtonSegment(value: 'dub', label: Text('Dub')),
-                      ],
-                      selected: {_track},
-                      onSelectionChanged: (selection) => _changeTrack(selection.first),
-                    ),
+                    if (_checkingTracks)
+                      const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else if (_availableTracks.length > 1)
+                      SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(value: 'sub', label: Text('Sub')),
+                          ButtonSegment(value: 'dub', label: Text('Dub')),
+                        ],
+                        selected: {_track},
+                        onSelectionChanged: (selection) =>
+                            _changeTrack(selection.first),
+                      )
+                    else
+                      Chip(
+                        avatar: const Icon(Icons.check_circle, size: 18),
+                        label: Text(_availableTracks.contains('dub') ? 'Dub' : 'Sub'),
+                        visualDensity: VisualDensity.compact,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 8),
