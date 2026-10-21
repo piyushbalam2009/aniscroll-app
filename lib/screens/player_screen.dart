@@ -546,7 +546,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
       body: isTv
           ? (_fullscreen
-              ? ColoredBox(color: Colors.black, child: SizedBox.expand(child: player))
+              ? Scaffold(body: ColoredBox(color: Colors.black, child: SizedBox.expand(child: player)))
               : Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
