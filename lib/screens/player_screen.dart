@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:webview_flutter/webview_flutter.dart';
 
@@ -20,6 +21,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final TextEditingController _episodeSearchController = TextEditingController();
 
   bool _loading = true;
+  bool _fullscreen = false;
+  bool _fullscreenWasActive = false;
   String? _error;
   int _episode = 1;
   int _rangeStart = 1;
@@ -53,6 +56,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    if (_fullscreenWasActive) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    }
     _episodeSearchController.dispose();
     super.dispose();
   }
@@ -410,8 +417,199 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  bool get _isTvLayout => MediaQuery.sizeOf(context).width >= 800;
+
+  Future<void> _toggleFullscreen() async {
+    final enteringFullscreen = !_fullscreen;
+    setState(() {
+      _fullscreen = !_fullscreen;
+      _fullscreenWasActive = _fullscreen;
+    });
+    await SystemChrome.setEnabledSystemUIMode(
+      _fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+    );
+    if (!_isTvLayout) {
+      await SystemChrome.setPreferredOrientations(
+        enteringFullscreen
+            ? const [
+                DeviceOrientation.landscapeLeft,
+                DeviceOrientation.landscapeRight,
+              ]
+            : DeviceOrientation.values,
+      );
+    }
+  }
+
+  Widget _buildPlayerSurface({required bool fullscreen}) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        WebViewWidget(controller: _controller),
+        if (_loading)
+          const Align(
+            alignment: Alignment.topCenter,
+            child: LinearProgressIndicator(minHeight: 3),
+          ),
+        if (_error != null)
+          Positioned.fill(
+            child: ColoredBox(
+              color: const Color(0xFF09090F),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, size: 40),
+                      const SizedBox(height: 10),
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      FilledButton(
+                        autofocus: true,
+                        onPressed: _loadPlayer,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        Positioned(
+          right: 12,
+          top: 12,
+          child: Material(
+            color: Colors.black.withValues(alpha: 0.78),
+            shape: const CircleBorder(),
+            child: IconButton(
+              autofocus: fullscreen,
+              tooltip: fullscreen ? 'Exit full screen' : 'Full screen',
+              onPressed: _toggleFullscreen,
+              icon: Icon(
+                fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                size: 30,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTrackControls({required bool isTv}) {
+    if (_checkingTracks) {
+      return const Chip(label: Text('Checking audio tracks…'));
+    }
+    final tracks = ['sub', 'dub']
+        .where((track) => _availableTracks.contains(track))
+        .toList(growable: false);
+    if (tracks.length < 2) {
+      return Chip(
+        avatar: const Icon(Icons.check_circle, size: 18),
+        label: Text(tracks.isEmpty ? _track.toUpperCase() : tracks.first.toUpperCase()),
+      );
+    }
+    return Wrap(
+      spacing: 10,
+      children: [
+        for (final track in tracks)
+          ChoiceChip(
+            autofocus: isTv && track == _track,
+            label: Text(track.toUpperCase()),
+            selected: track == _track,
+            onSelected: (_) => _changeTrack(track),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isTv = _isTvLayout;
+
+    if (_fullscreen) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: SizedBox.expand(
+          child: _buildPlayerSurface(fullscreen: true),
+        ),
+      );
+    }
+
+    if (isTv) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(
+            widget.anime.englishTitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        body: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: 7,
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: _buildPlayerSurface(fullscreen: false),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    widget.anime.englishTitle,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildTrackControls(isTv: true),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Tip: Select the full-screen icon for cinema mode. Use the Back '
+                    'button to return to episodes.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.white70,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            const VerticalDivider(width: 1),
+            SizedBox(
+              width: 360,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(14, 18, 14, 24),
+                children: [
+                  Text(
+                    'Episodes',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildEpisodeHeader(),
+                  const SizedBox(height: 12),
+                  if (_episodeCount > 50)
+                    _buildEpisodeGrid()
+                  else if (_episodeCount > 0)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Column(
+                        children: List<Widget>.generate(
+                          _episodeCount,
+                          (index) => _buildEpisodeRow(index + 1),
+                        ),
+                      ),
+                    )
+                  else
+                    const Text('Episode list unavailable.'),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -425,40 +623,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         children: [
           AspectRatio(
             aspectRatio: 16 / 9,
-            child: Stack(
-              children: [
-                WebViewWidget(controller: _controller),
-                if (_loading)
-                  const Align(
-                    alignment: Alignment.topCenter,
-                    child: LinearProgressIndicator(minHeight: 3),
-                  ),
-                if (_error != null)
-                  Positioned.fill(
-                    child: ColoredBox(
-                      color: const Color(0xFF09090F),
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.warning_amber_rounded, size: 40),
-                              const SizedBox(height: 10),
-                              Text(_error!, textAlign: TextAlign.center),
-                              const SizedBox(height: 12),
-                              FilledButton(
-                                onPressed: _loadPlayer,
-                                child: const Text('Retry'),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            child: _buildPlayerSurface(fullscreen: false),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -470,41 +635,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 12),
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if (_checkingTracks)
-                      const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else if (_availableTracks.length > 1)
-                      SegmentedButton<String>(
-                        segments: const [
-                          ButtonSegment(value: 'sub', label: Text('Sub')),
-                          ButtonSegment(value: 'dub', label: Text('Dub')),
-                        ],
-                        selected: {_track},
-                        onSelectionChanged: (selection) =>
-                            _changeTrack(selection.first),
-                      )
-                    else
-                      Chip(
-                        avatar: const Icon(Icons.check_circle, size: 18),
-                        label: Text(_availableTracks.contains('dub') ? 'Dub' : 'Sub'),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                  ],
-                ),
+                _buildTrackControls(isTv: false),
                 const SizedBox(height: 8),
                 Text(
                   'Streaming via ZokoAnime only. Pop-up and external navigation '
                   'blocking is best-effort; ads rendered inside the provider '
                   'player may still appear.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white70),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white70,
+                      ),
                 ),
                 const SizedBox(height: 22),
                 _buildEpisodeList(),
@@ -512,7 +651,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   const SizedBox(height: 28),
                   Text(
                     'Synopsis',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(widget.anime.synopsis),
