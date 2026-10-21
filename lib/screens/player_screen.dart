@@ -429,8 +429,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final isTv = _isTvLayout;
-    final player = AspectRatio(
-      aspectRatio: _fullscreen ? 16 / 9 : 16 / 9,
+    final player = SizedBox(
+      height: _fullscreen && isTv ? double.infinity : null,
+      child: AspectRatio(
+      aspectRatio: 16 / 9,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -480,6 +482,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
 
