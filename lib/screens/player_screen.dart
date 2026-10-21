@@ -420,6 +420,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool get _isTvLayout => MediaQuery.sizeOf(context).width >= 800;
 
   Future<void> _toggleFullscreen() async {
+    final enteringFullscreen = !_fullscreen;
     setState(() {
       _fullscreen = !_fullscreen;
       _fullscreenWasActive = _fullscreen;
@@ -427,14 +428,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await SystemChrome.setEnabledSystemUIMode(
       _fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
     );
-    await SystemChrome.setPreferredOrientations(
-      _fullscreen
-          ? const [
-              DeviceOrientation.landscapeLeft,
-              DeviceOrientation.landscapeRight,
-            ]
-          : DeviceOrientation.values,
-    );
+    if (!_isTvLayout) {
+      await SystemChrome.setPreferredOrientations(
+        enteringFullscreen
+            ? const [
+                DeviceOrientation.landscapeLeft,
+                DeviceOrientation.landscapeRight,
+              ]
+            : DeviceOrientation.values,
+      );
+    }
   }
 
   Widget _buildPlayerSurface({required bool fullscreen}) {
