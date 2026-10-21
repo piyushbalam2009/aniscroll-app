@@ -439,9 +439,44 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final isTv = _isTvLayout;
     final player = SizedBox(
       height: _fullscreen && isTv ? double.infinity : null,
-      child: AspectRatio(
-        aspectRatio: 16 / 9,
-      child: Stack(
+      child: _fullscreen && isTv
+          ? Stack(
+              fit: StackFit.expand,
+              children: [
+                WebViewWidget(controller: _controller),
+                if (_loading)
+                  const Align(alignment: Alignment.topCenter, child: LinearProgressIndicator(minHeight: 3)),
+                if (_error != null)
+                  Positioned.fill(
+                    child: ColoredBox(
+                      color: const Color(0xFF09090F),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [Text(_error!, textAlign: TextAlign.center), const SizedBox(height: 12), FilledButton(onPressed: _loadPlayer, child: const Text('Retry'))],
+                        ),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  right: 12,
+                  top: 12,
+                  child: Material(
+                    color: Colors.black.withValues(alpha: 0.75),
+                    borderRadius: BorderRadius.circular(30),
+                    child: IconButton(
+                      autofocus: true,
+                      tooltip: 'Exit full screen',
+                      onPressed: _toggleFullscreen,
+                      icon: const Icon(Icons.fullscreen_exit),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : AspectRatio(
+              aspectRatio: 16 / 9,
+              child: Stack(
         fit: StackFit.expand,
         children: [
           WebViewWidget(controller: _controller),
@@ -490,8 +525,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
           ),
         ],
-      ),
-      ),
+              ),
+            ),
     );
 
     if (_fullscreen && !isTv) {
