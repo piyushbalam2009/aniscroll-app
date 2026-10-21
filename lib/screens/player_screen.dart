@@ -22,6 +22,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   bool _loading = true;
   bool _fullscreen = false;
+  bool _fullscreenWasActive = false;
   String? _error;
   int _episode = 1;
   int _rangeStart = 1;
@@ -55,6 +56,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    if (_fullscreenWasActive) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    }
     _episodeSearchController.dispose();
     super.dispose();
   }
@@ -415,7 +420,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool get _isTvLayout => MediaQuery.sizeOf(context).width >= 800;
 
   Future<void> _toggleFullscreen() async {
-    setState(() => _fullscreen = !_fullscreen);
+    setState(() {
+      _fullscreen = !_fullscreen;
+      _fullscreenWasActive = _fullscreen;
+    });
     await SystemChrome.setEnabledSystemUIMode(
       _fullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
     );
@@ -502,7 +510,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
       ),
       body: isTv
-          ? Row(
+          ? (_fullscreen
+              ? ColoredBox(color: Colors.black, child: SizedBox.expand(child: player))
+              : Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
@@ -568,7 +578,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
                 ),
               ],
-            )
+            ))
           : ListView(
               padding: const EdgeInsets.only(bottom: 24),
               children: [
