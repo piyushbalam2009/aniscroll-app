@@ -440,7 +440,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final player = SizedBox(
       height: _fullscreen && isTv ? double.infinity : null,
       child: AspectRatio(
-      aspectRatio: 16 / 9,
+        aspectRatio: 16 / 9,
       child: Stack(
         fit: StackFit.expand,
         children: [
