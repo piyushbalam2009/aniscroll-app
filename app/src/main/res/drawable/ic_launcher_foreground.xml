@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Bold AniScroll 'A' Chevron + Center Dot inside safe zone -->
+    <path
+        android:fillColor="#00C853"
+        android:pathData="M54,28 L76,70 A6,6 0 0,1 65.4,75.6 L54,53.5 L42.6,75.6 A6,6 0 0,1 32,70 Z" />
+    <path
+        android:fillColor="#00C853"
+        android:pathData="M54,64m-6.5,0a6.5,6.5 0,1 1,13 0a6.5,6.5 0,1 1,-13 0" />
+</vector>
