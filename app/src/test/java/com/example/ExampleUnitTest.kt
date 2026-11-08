@@ -299,5 +299,79 @@ class ExampleUnitTest {
         assertTrue(rewritten.contains("https://api.aniscroll.in/api/proxy/hls?url=https%3A%2F%2Fs9.SnapStorm.site%2Fv74%2F720p%2Fseg-001.ts"))
         assertTrue(rewritten.contains("https://api.aniscroll.in/api/proxy/hls?url=https%3A%2F%2Fs9.SnapStorm.site%2Fv74%2F720p%2Fseg-002.ts"))
     }
+
+    @Test
+    fun `NetworkConnectivityObserver evaluateCapabilities requires both internet and validated capabilities`() {
+        assertTrue(
+            com.example.core.network.NetworkConnectivityObserver.evaluateCapabilities(
+                hasInternetCapability = true,
+                hasValidatedCapability = true
+            )
+        )
+        assertFalse(
+            com.example.core.network.NetworkConnectivityObserver.evaluateCapabilities(
+                hasInternetCapability = true,
+                hasValidatedCapability = false
+            )
+        )
+        assertFalse(
+            com.example.core.network.NetworkConnectivityObserver.evaluateCapabilities(
+                hasInternetCapability = false,
+                hasValidatedCapability = true
+            )
+        )
+        assertFalse(
+            com.example.core.network.NetworkConnectivityObserver.evaluateCapabilities(
+                hasInternetCapability = false,
+                hasValidatedCapability = false
+            )
+        )
+    }
+
+    @Test
+    fun `OfflineDownloadItem marks only COMPLETED items playable offline and partitions Downloaded vs Downloading tabs`() {
+        fun sampleItem(id: String, state: com.example.domain.model.OfflineDownloadState, percent: Float) =
+            com.example.domain.model.OfflineDownloadItem(
+                downloadId = id,
+                anilistId = 154587,
+                episode = 1,
+                totalEpisodes = 28,
+                audioType = "sub",
+                animeTitle = "Frieren: Beyond Journey's End",
+                posterUrl = "https://example.com/poster.jpg",
+                coverUrl = "https://example.com/cover.jpg",
+                qualityLabel = "720p",
+                videoHeight = 720,
+                hlsProxyUrl = "https://api.aniscroll.in/api/proxy/hls?url=https%3A%2F%2Fcdn.example.com%2Fmaster.m3u8",
+                refererUrl = "https://megaplay.buzz/",
+                state = state,
+                progressPercent = percent,
+                bytesDownloaded = 128_000_000L,
+                contentLengthBytes = 256_000_000L,
+                failureReasonText = null,
+                localSubtitleTracks = emptyList(),
+                createdAtMs = 1000L,
+                updatedAtMs = 2000L
+            )
+
+        val completed = sampleItem("ep1", com.example.domain.model.OfflineDownloadState.COMPLETED, 100f)
+        val downloading = sampleItem("ep2", com.example.domain.model.OfflineDownloadState.DOWNLOADING, 65f)
+        val paused = sampleItem("ep3", com.example.domain.model.OfflineDownloadState.PAUSED, 40f)
+        val queued = sampleItem("ep4", com.example.domain.model.OfflineDownloadState.QUEUED, 0f)
+        val failed = sampleItem("ep5", com.example.domain.model.OfflineDownloadState.FAILED, 12f)
+
+        assertTrue(completed.isPlayableOffline)
+        assertFalse(downloading.isPlayableOffline)
+        assertFalse(paused.isPlayableOffline)
+        assertFalse(queued.isPlayableOffline)
+        assertFalse(failed.isPlayableOffline)
+
+        val allItems = listOf(completed, downloading, paused, queued, failed)
+        val downloadedTab = allItems.filter { it.isPlayableOffline }
+        val downloadingTab = allItems.filter { !it.isPlayableOffline }
+
+        assertEquals(listOf("ep1"), downloadedTab.map { it.downloadId })
+        assertEquals(listOf("ep2", "ep3", "ep4", "ep5"), downloadingTab.map { it.downloadId })
+    }
 }
 

@@ -67,13 +67,17 @@ import kotlinx.coroutines.delay
 fun SplashScreen(
     isAppReady: Boolean,
     onboardingCompleted: Boolean,
+    isOnline: Boolean = true,
     onNavigateToWelcome: () -> Unit,
-    onNavigateToMain: () -> Unit
+    onNavigateToMain: () -> Unit,
+    onNavigateToOfflineDownloads: () -> Unit = {}
 ) {
-    LaunchedEffect(isAppReady, onboardingCompleted) {
+    LaunchedEffect(isAppReady, onboardingCompleted, isOnline) {
         if (isAppReady) {
             delay(450L)
-            if (onboardingCompleted) {
+            if (!isOnline) {
+                onNavigateToOfflineDownloads()
+            } else if (onboardingCompleted) {
                 onNavigateToMain()
             } else {
                 onNavigateToWelcome()

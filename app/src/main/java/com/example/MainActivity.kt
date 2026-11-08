@@ -48,11 +48,13 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.example.core.common.AppResult
 import com.example.core.navigation.MainBottomTab
 import com.example.core.navigation.ScreenRoute
+import com.example.core.network.NetworkConnectionState
 import com.example.domain.model.Anime
 import com.example.feature.common.MainViewModel
 import com.example.feature.details.AnimeDetailsScreen
@@ -108,10 +110,32 @@ fun AniScrollAppContent(
     mainViewModel: MainViewModel
 ) {
     val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
     val preferences by mainViewModel.preferences.collectAsState()
     val isAppReady by mainViewModel.isAppReady.collectAsState()
     val homeState by mainViewModel.homeState.collectAsState()
+    val connectionState by mainViewModel.connectionState.collectAsState()
+    val isOnline by mainViewModel.isOnline.collectAsState()
+    val offlineDownloads by mainViewModel.offlineDownloads.collectAsState()
     var activeBottomTab by rememberSaveable { mutableStateOf(MainBottomTab.HOME) }
+
+    // Automatic Online -> Offline transition handler:
+    // Automatically navigate to DownloadsScreen when internet connection drops,
+    // without interrupting an active VideoPlayer session or duplicating Downloads on the stack.
+    LaunchedEffect(connectionState, isAppReady) {
+        if (!isAppReady) return@LaunchedEffect
+        if (connectionState == NetworkConnectionState.OFFLINE) {
+            val currentRoute = navBackStackEntry?.destination?.route.orEmpty()
+            val isInPlayer = currentRoute.contains("VideoPlayer", ignoreCase = true)
+            val isAlreadyInDownloads = currentRoute.contains("Downloads", ignoreCase = true)
+            val isInSplash = currentRoute.contains("Splash", ignoreCase = true)
+            if (!isInPlayer && !isAlreadyInDownloads && !isInSplash) {
+                navController.navigate(ScreenRoute.Downloads) {
+                    launchSingleTop = true
+                }
+            }
+        }
+    }
 
     val navigateToAnime: (Anime) -> Unit = { anime ->
         if (anime.isMovie) {
@@ -142,6 +166,7 @@ fun AniScrollAppContent(
             SplashScreen(
                 isAppReady = isAppReady,
                 onboardingCompleted = preferences.onboardingCompleted,
+                isOnline = isOnline,
                 onNavigateToWelcome = {
                     navController.navigate(ScreenRoute.Welcome) {
                         popUpTo(ScreenRoute.Splash) { inclusive = true }
@@ -150,6 +175,12 @@ fun AniScrollAppContent(
                 onNavigateToMain = {
                     navController.navigate(ScreenRoute.Main) {
                         popUpTo(ScreenRoute.Splash) { inclusive = true }
+                    }
+                },
+                onNavigateToOfflineDownloads = {
+                    navController.navigate(ScreenRoute.Downloads) {
+                        popUpTo(ScreenRoute.Splash) { inclusive = true }
+                        launchSingleTop = true
                     }
                 }
             )
@@ -333,11 +364,15 @@ fun AniScrollAppContent(
 
                             MainBottomTab.SETTINGS -> {
                                 val context = LocalContext.current
+                                val completedCount = offlineDownloads.count { it.isPlayableOffline }
                                 SettingsScreen(
                                     preferences = preferences,
                                     cacheSizeText = mainViewModel.calculateCacheSizeMb(context),
+                                    downloadedEpisodesCount = completedCount,
                                     onOpenDownloads = {
-                                        navController.navigate(ScreenRoute.Downloads)
+                                        navController.navigate(ScreenRoute.Downloads) {
+                                            launchSingleTop = true
+                                        }
                                     },
                                     onOpenHelpCenter = {
                                         navController.navigate(ScreenRoute.HelpCenter)
@@ -357,6 +392,7 @@ fun AniScrollAppContent(
                                     onSetDefaultDisplayMode = { mainViewModel.setDefaultDisplayMode(it) },
                                     onSetAutoPlayNext = { mainViewModel.setAutoPlayNextEpisode(it) },
                                     onSetRememberPosition = { mainViewModel.setRememberPlaybackPosition(it) },
+                                    onSetWifiOnlyDownloads = { mainViewModel.setWifiOnlyDownloads(it) },
                                     onUpdateNotificationPrefs = { general, airing, newEp, appUpd ->
                                         mainViewModel.updateNotificationPrefs(general, airing, newEp, appUpd)
                                     },
@@ -490,7 +526,9 @@ fun AniScrollAppContent(
                     mainViewModel.cancelOrDeleteDownload(downloadId)
                 },
                 onOpenDownloadsScreen = {
-                    navController.navigate(ScreenRoute.Downloads)
+                    navController.navigate(ScreenRoute.Downloads) {
+                        launchSingleTop = true
+                    }
                 },
                 onAnimeClick = { relatedAnime ->
                     navigateToAnime(relatedAnime)
@@ -545,7 +583,9 @@ fun AniScrollAppContent(
                     mainViewModel.cancelOrDeleteDownload(downloadId)
                 },
                 onOpenDownloadsScreen = {
-                    navController.navigate(ScreenRoute.Downloads)
+                    navController.navigate(ScreenRoute.Downloads) {
+                        launchSingleTop = true
+                    }
                 },
                 onAnimeClick = { related -> navigateToAnime(related) },
                 onRetry = {
@@ -582,17 +622,42 @@ fun AniScrollAppContent(
         }
 
         composable<ScreenRoute.Downloads> {
-            val offlineDownloads by mainViewModel.offlineDownloads.collectAsState()
+            val (storageUsedBytes, storageFreeBytes) = mainViewModel.getDownloadsStorageSummary()
             DownloadsScreen(
                 downloads = offlineDownloads,
+                connectionState = connectionState,
+                isOnline = isOnline,
+                storageUsedBytes = storageUsedBytes,
+                storageFreeBytes = storageFreeBytes,
+                wifiOnlyDownloads = preferences.wifiOnlyDownloads,
+                onToggleWifiOnly = { enabled ->
+                    mainViewModel.setWifiOnlyDownloads(enabled)
+                },
+                onRetryConnection = {
+                    val nowOnline = mainViewModel.retryConnectionCheck()
+                    if (nowOnline) {
+                        mainViewModel.acknowledgeReconnected()
+                    }
+                },
+                onBackToHome = {
+                    mainViewModel.acknowledgeReconnected()
+                    activeBottomTab = MainBottomTab.HOME
+                    if (!navController.popBackStack(ScreenRoute.Main, inclusive = false)) {
+                        navController.navigate(ScreenRoute.Main) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                },
                 onPlayOffline = { item ->
-                    navigateToPlayer(
-                        item.anilistId,
-                        item.episode,
-                        item.audioType,
-                        item.animeTitle,
-                        item.totalEpisodes.coerceAtLeast(item.episode)
-                    )
+                    if (item.isPlayableOffline) {
+                        navigateToPlayer(
+                            item.anilistId,
+                            item.episode,
+                            item.audioType,
+                            item.animeTitle,
+                            item.totalEpisodes.coerceAtLeast(item.episode)
+                        )
+                    }
                 },
                 onPauseDownload = { downloadId ->
                     mainViewModel.pauseDownload(downloadId)
@@ -606,7 +671,13 @@ fun AniScrollAppContent(
                 onClearAllDownloads = {
                     mainViewModel.clearAllDownloads()
                 },
-                onBack = { navController.popBackStack() }
+                onBack = {
+                    if (!navController.popBackStack()) {
+                        navController.navigate(ScreenRoute.Main) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                }
             )
         }
 

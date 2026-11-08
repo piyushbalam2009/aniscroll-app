@@ -207,6 +207,13 @@ data class OfflineDownloadItem(
                 String.format(Locale.US, "%.1f MB", mb)
             }
         }
+
+    /**
+     * An episode is playable offline ONLY when the download is verified COMPLETED.
+     * Queued, downloading, paused, or failed downloads are never marked playable offline.
+     */
+    val isPlayableOffline: Boolean
+        get() = state == OfflineDownloadState.COMPLETED
 }
 
 @Serializable
@@ -321,6 +328,7 @@ data class UserPreferencesState(
     val defaultDisplayMode: VideoDisplayMode = VideoDisplayMode.FIT,
     val autoPlayNextEpisode: Boolean = true,
     val rememberPlaybackPosition: Boolean = true,
+    val wifiOnlyDownloads: Boolean = false,
     val subtitleFontSizeSp: Float = 18f,
     val subtitleColorHex: String = "#FFFFFF",
     val subtitleBackgroundOpacity: Float = 0.65f,

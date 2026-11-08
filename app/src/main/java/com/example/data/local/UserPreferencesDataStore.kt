@@ -26,6 +26,7 @@ class UserPreferencesDataStore(private val context: Context) {
         val DEFAULT_DISPLAY_MODE = stringPreferencesKey("default_display_mode")
         val AUTO_PLAY_NEXT = booleanPreferencesKey("auto_play_next")
         val REMEMBER_POSITION = booleanPreferencesKey("remember_position")
+        val WIFI_ONLY_DOWNLOADS = booleanPreferencesKey("wifi_only_downloads")
         val SUBTITLE_FONT_SIZE = floatPreferencesKey("subtitle_font_size")
         val SUBTITLE_COLOR = stringPreferencesKey("subtitle_color")
         val SUBTITLE_BG_OPACITY = floatPreferencesKey("subtitle_bg_opacity")
@@ -48,6 +49,7 @@ class UserPreferencesDataStore(private val context: Context) {
             defaultDisplayMode = VideoDisplayMode.fromNameOrDefault(prefs[Keys.DEFAULT_DISPLAY_MODE]),
             autoPlayNextEpisode = prefs[Keys.AUTO_PLAY_NEXT] ?: true,
             rememberPlaybackPosition = prefs[Keys.REMEMBER_POSITION] ?: true,
+            wifiOnlyDownloads = prefs[Keys.WIFI_ONLY_DOWNLOADS] ?: false,
             subtitleFontSizeSp = prefs[Keys.SUBTITLE_FONT_SIZE] ?: 18f,
             subtitleColorHex = prefs[Keys.SUBTITLE_COLOR] ?: "#FFFFFF",
             subtitleBackgroundOpacity = prefs[Keys.SUBTITLE_BG_OPACITY] ?: 0.65f,
@@ -98,6 +100,10 @@ class UserPreferencesDataStore(private val context: Context) {
 
     suspend fun setRememberPlaybackPosition(enabled: Boolean) {
         context.dataStore.edit { it[Keys.REMEMBER_POSITION] = enabled }
+    }
+
+    suspend fun setWifiOnlyDownloads(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.WIFI_ONLY_DOWNLOADS] = enabled }
     }
 
     suspend fun setSubtitleAppearance(fontSizeSp: Float, colorHex: String, bgOpacity: Float) {

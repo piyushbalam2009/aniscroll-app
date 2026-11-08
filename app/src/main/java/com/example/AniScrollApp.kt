@@ -6,6 +6,7 @@ import coil.ImageLoaderFactory
 import com.example.core.database.AniScrollDatabase
 import com.example.core.image.AniImageLoader
 import com.example.core.network.NetworkClient
+import com.example.core.network.NetworkConnectivityObserver
 import com.example.data.anilist.AniListService
 import com.example.data.aniscroll.AniScrollService
 import com.example.data.kitsu.KitsuService
@@ -39,6 +40,7 @@ class AppContainer(context: Application) {
     val backupManager = LocalBackupManager(dao)
     val notificationScheduler = NotificationScheduler(context)
     val media3DownloadStack = Media3DownloadStack(context)
+    val networkConnectivityObserver = NetworkConnectivityObserver(context)
 
     private val aniListService: AniListService = NetworkClient.createService(
         baseUrl = "https://graphql.anilist.co/",

@@ -118,7 +118,10 @@ class VideoPlayerViewModel(
                 selectedQualityLabel = prefs.defaultVideoQuality,
                 displayMode = prefs.defaultDisplayMode
             )
-            // Load anime metadata for poster/cover saving
+            // Immediately resolve stream (checks completed local offline download first)
+            resolveCurrentEpisodeStream(preserveCurrentPositionMs = null)
+
+            // Load anime metadata in parallel for poster/cover enrichment (uses Room cache when offline)
             val detailsRes = container.animeRepository.getAnimeDetails(initialAnilistId)
             val animeObj = (detailsRes as? AppResult.Success)?.data
             if (animeObj != null) {
@@ -128,7 +131,6 @@ class VideoPlayerViewModel(
                     totalEpisodes = animeObj.availableEpisodeCount.coerceAtLeast(_uiState.value.totalEpisodes)
                 )
             }
-            resolveCurrentEpisodeStream(preserveCurrentPositionMs = null)
         }
     }
 
@@ -145,7 +147,7 @@ class VideoPlayerViewModel(
                 container.historyRepository.getSavedPositionMs(current.anilistId, current.episode)
             } else 0L
 
-            // Check if a completed offline HLS download exists in Media3 SimpleCache & DownloadIndex
+            // Check if a completed offline HLS download exists in Media3 SimpleCache & DownloadIndex FIRST
             val offlineInfo = container.offlineDownloadRepository.getCompletedOfflinePlaybackInfo(
                 anilistId = current.anilistId,
                 episode = current.episode,
@@ -177,12 +179,23 @@ class VideoPlayerViewModel(
                     isOfflinePlayback = true,
                     offlineDownloadItem = offlineItem,
                     offlineDownloadRequest = downloadReq,
+                    animeTitle = offlineItem.animeTitle.ifBlank { _uiState.value.animeTitle },
+                    totalEpisodes = offlineItem.totalEpisodes.coerceAtLeast(_uiState.value.totalEpisodes),
                     streamResolution = offlineResolution,
                     activeStreamUrl = offlineItem.hlsProxyUrl,
                     savedPositionMs = savedPos,
                     selectedSubtitleTrack = defaultOfflineSub,
                     selectedQualityLabel = offlineItem.qualityLabel,
                     errorMessage = null
+                )
+                return@launch
+            }
+
+            if (!container.networkConnectivityObserver.isOnline.value) {
+                _uiState.value = _uiState.value.copy(
+                    isLoadingStream = false,
+                    isOfflinePlayback = false,
+                    errorMessage = "You are offline and Episode ${current.episode} (${current.audioType.uppercase()}) has not been downloaded for offline playback."
                 )
                 return@launch
             }
@@ -229,6 +242,12 @@ class VideoPlayerViewModel(
 
     fun tryFallbackStreamOrReportError(playerErrorMsg: String, currentPositionMs: Long) {
         val current = _uiState.value
+        if (current.isOfflinePlayback) {
+            _uiState.value = current.copy(
+                errorMessage = "Offline Playback Error: $playerErrorMsg. Ensure the download completed before playing offline."
+            )
+            return
+        }
         val fallback = current.streamResolution?.fallbackDirectM3u8Url
         if (!current.usedFallbackUrl && !fallback.isNullOrBlank() && fallback != current.activeStreamUrl) {
             _uiState.value = current.copy(
@@ -336,13 +355,14 @@ class VideoPlayerViewModel(
     fun saveProgress(positionMs: Long, durationMs: Long) {
         val state = _uiState.value
         val anime = state.anime
+        val offlineItem = state.offlineDownloadItem
         viewModelScope.launch {
             container.historyRepository.savePlaybackProgress(
                 anime = anime,
                 anilistId = state.anilistId,
-                animeTitle = anime?.displayTitle ?: state.animeTitle,
-                posterUrl = anime?.posterUrl ?: "",
-                coverUrl = anime?.coverUrl,
+                animeTitle = anime?.displayTitle ?: offlineItem?.animeTitle ?: state.animeTitle,
+                posterUrl = anime?.posterUrl ?: offlineItem?.posterUrl ?: "",
+                coverUrl = anime?.coverUrl ?: offlineItem?.coverUrl,
                 episode = state.episode,
                 totalEpisodes = state.totalEpisodes,
                 audioType = state.audioType,

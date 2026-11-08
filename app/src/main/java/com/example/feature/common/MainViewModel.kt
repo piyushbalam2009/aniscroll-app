@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.AppContainer
 import com.example.core.common.AppResult
+import com.example.core.network.NetworkConnectionState
 import com.example.domain.model.AiringScheduleItem
 import com.example.domain.model.Anime
 import com.example.domain.model.AnimeFilterState
@@ -58,6 +59,9 @@ class MainViewModel(
             started = SharingStarted.Eagerly,
             initialValue = UserPreferencesState()
         )
+
+    val connectionState: StateFlow<NetworkConnectionState> = container.networkConnectivityObserver.connectionState
+    val isOnline: StateFlow<Boolean> = container.networkConnectivityObserver.isOnline
 
     private val _isAppReady = MutableStateFlow(false)
     val isAppReady: StateFlow<Boolean> = _isAppReady.asStateFlow()
@@ -116,11 +120,26 @@ class MainViewModel(
     init {
         viewModelScope.launch {
             val initialPrefs = container.preferencesDataStore.preferencesFlow.first()
+            container.media3DownloadStack.setWifiOnlyRequirements(initialPrefs.wifiOnlyDownloads)
             _isAppReady.value = true
-            refreshHome(initialPrefs.selectedInterests)
-            loadTopHits()
-            loadNewReleases()
-            loadScheduleForDayOffset(0)
+            if (isOnline.value) {
+                refreshHome(initialPrefs.selectedInterests)
+                loadTopHits()
+                loadNewReleases()
+                loadScheduleForDayOffset(0)
+            }
+        }
+
+        // Automatically load Home data once when device transitions from Offline -> Online
+        viewModelScope.launch {
+            isOnline.collectLatest { online ->
+                if (online && _isAppReady.value && _homeState.value.dashboard.trendingAnime.isEmpty()) {
+                    refreshHome(preferences.value.selectedInterests)
+                    loadTopHits()
+                    loadNewReleases()
+                    loadScheduleForDayOffset(_selectedDayOffset.value)
+                }
+            }
         }
 
         // Debounced search listener
@@ -426,6 +445,34 @@ class MainViewModel(
 
     fun setRememberPlaybackPosition(enabled: Boolean) {
         viewModelScope.launch { container.preferencesDataStore.setRememberPlaybackPosition(enabled) }
+    }
+
+    fun setWifiOnlyDownloads(enabled: Boolean) {
+        viewModelScope.launch {
+            container.preferencesDataStore.setWifiOnlyDownloads(enabled)
+            container.media3DownloadStack.setWifiOnlyRequirements(enabled)
+        }
+    }
+
+    fun retryConnectionCheck(): Boolean {
+        val online = container.networkConnectivityObserver.retryConnectionCheck()
+        if (online && _homeState.value.dashboard.trendingAnime.isEmpty()) {
+            refreshHome(preferences.value.selectedInterests)
+            loadTopHits()
+            loadNewReleases()
+            loadScheduleForDayOffset(_selectedDayOffset.value)
+        }
+        return online
+    }
+
+    fun acknowledgeReconnected() {
+        container.networkConnectivityObserver.acknowledgeReconnected()
+    }
+
+    fun getDownloadsStorageSummary(): Pair<Long, Long> {
+        val usedBytes = container.media3DownloadStack.calculateDownloadedBytesOnDisk()
+        val freeBytes = container.media3DownloadStack.calculateAvailableFreeBytesOnDisk()
+        return usedBytes to freeBytes
     }
 
     fun setSubtitleAppearance(fontSizeSp: Float, colorHex: String, bgOpacity: Float) {

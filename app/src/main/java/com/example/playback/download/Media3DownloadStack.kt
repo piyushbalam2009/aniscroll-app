@@ -341,6 +341,54 @@ class Media3DownloadStack(
     }
 
     /**
+     * Configures Media3 [DownloadManager] and [AniScrollHlsDownloadService] network requirements
+     * for Wi-Fi-only (unmetered) vs any network.
+     */
+    fun setWifiOnlyRequirements(wifiOnly: Boolean) {
+        val requirements = if (wifiOnly) {
+            androidx.media3.exoplayer.scheduler.Requirements(
+                androidx.media3.exoplayer.scheduler.Requirements.NETWORK_UNMETERED
+            )
+        } else {
+            androidx.media3.exoplayer.scheduler.Requirements(
+                androidx.media3.exoplayer.scheduler.Requirements.NETWORK
+            )
+        }
+        runCatching {
+            androidx.media3.exoplayer.offline.DownloadService.sendSetRequirements(
+                appContext,
+                AniScrollHlsDownloadService::class.java,
+                requirements,
+                /* foreground= */ false
+            )
+        }
+        downloadManager.requirements = requirements
+    }
+
+    /**
+     * Calculates the actual disk bytes used by Media3 HLS downloads (`SimpleCache`) and local subtitles.
+     */
+    fun calculateDownloadedBytesOnDisk(): Long {
+        val cacheBytes = runCatching { downloadCache.cacheSpace }.getOrDefault(0L)
+            .coerceAtLeast(getFolderSize(downloadDirectory))
+        val subBytes = getFolderSize(subtitleDirectory)
+        return cacheBytes + subBytes
+    }
+
+    fun calculateAvailableFreeBytesOnDisk(): Long {
+        return runCatching { downloadDirectory.usableSpace }.getOrDefault(0L)
+    }
+
+    private fun getFolderSize(dir: File?): Long {
+        if (dir == null || !dir.exists()) return 0L
+        var total = 0L
+        dir.listFiles()?.forEach { f ->
+            total += if (f.isDirectory) getFolderSize(f) else f.length()
+        }
+        return total
+    }
+
+    /**
      * Uses Media3 [DownloadHelper] to prepare the HLS manifest from `hlsProxyUrl` and inspect
      * the actual video tracks in `MappedTrackInfo`, merging them with the master playlist variants.
      */

@@ -108,6 +108,7 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(
     preferences: UserPreferencesState,
     cacheSizeText: String,
+    downloadedEpisodesCount: Int = 0,
     onOpenDownloads: () -> Unit,
     onOpenHelpCenter: () -> Unit,
     onOpenPrivacyPolicy: () -> Unit,
@@ -121,6 +122,7 @@ fun SettingsScreen(
     onSetDefaultDisplayMode: (com.example.domain.model.VideoDisplayMode) -> Unit = {},
     onSetAutoPlayNext: (Boolean) -> Unit,
     onSetRememberPosition: (Boolean) -> Unit,
+    onSetWifiOnlyDownloads: (Boolean) -> Unit = {},
     onUpdateNotificationPrefs: (Boolean?, Boolean?, Boolean?, Boolean?) -> Unit,
     onClearCache: () -> Unit,
     onClearHistory: () -> Unit,
@@ -192,6 +194,24 @@ fun SettingsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            SettingsGroupHeader("Offline & Downloads")
+
+            SettingsNavRow(
+                icon = Icons.Default.Download,
+                title = "Downloads",
+                subtitle = "Manage downloaded anime and offline episodes",
+                valueText = if (downloadedEpisodesCount > 0) "$downloadedEpisodesCount saved" else null,
+                onClick = onOpenDownloads,
+                testTag = "settings_downloads_row"
+            )
+            SettingsToggleRow(
+                icon = Icons.Default.Download,
+                title = "Wi-Fi Only Downloads",
+                checked = preferences.wifiOnlyDownloads,
+                onCheckedChange = onSetWifiOnlyDownloads
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
             SettingsGroupHeader("General")
 
             SettingsToggleRow(
@@ -266,12 +286,6 @@ fun SettingsScreen(
                 checked = preferences.rememberPlaybackPosition,
                 onCheckedChange = onSetRememberPosition
             )
-            SettingsNavRow(
-                icon = Icons.Default.Download,
-                title = "Download Architecture",
-                valueText = "Live HLS Only",
-                onClick = onOpenDownloads
-            )
 
             Spacer(modifier = Modifier.height(10.dp))
             SettingsGroupHeader("Storage & Local Backup")
@@ -279,10 +293,11 @@ fun SettingsScreen(
             SettingsNavRow(
                 icon = Icons.Default.CleaningServices,
                 title = "Clear Cache",
+                subtitle = "Clears image & metadata cache only (keeps downloaded episodes)",
                 valueText = cacheSizeText,
                 onClick = {
                     onClearCache()
-                    statusBanner = "Image and metadata cache cleared."
+                    statusBanner = "Image and metadata cache cleared. Offline downloads preserved."
                 }
             )
             SettingsNavRow(
@@ -694,7 +709,7 @@ fun SettingsScreen(
             title = { Text("AniScroll v1.0.0", color = AniTextPrimary, fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    text = "AniScroll is a privacy-first native Android anime discovery and HLS streaming application.\n\n• Metadata: AniList GraphQL API\n• Artwork: Kitsu JSON:API\n• Streaming: AniScroll HLS API\n• Playback: AndroidX Media3 ExoPlayer\n• Storage: 100% Local Room & DataStore (Zero cloud accounts or tracking)",
+                    text = "AniScroll is a privacy-first native Android anime discovery and HLS streaming application.\n\n• Metadata: AniList GraphQL API\n• Artwork: Kitsu JSON:API\n• Streaming: AniScroll HLS API\n• Playback & Offline HLS: AndroidX Media3 ExoPlayer & DownloadManager\n• Storage: 100% Local Room & DataStore (Zero cloud accounts or tracking)",
                     style = MaterialTheme.typography.bodyMedium,
                     color = AniTextSecondary
                 )
@@ -723,8 +738,10 @@ private fun SettingsGroupHeader(title: String) {
 private fun SettingsNavRow(
     icon: ImageVector,
     title: String,
+    subtitle: String? = null,
     valueText: String? = null,
     tint: Color = MaterialTheme.colorScheme.onBackground,
+    testTag: String? = null,
     onClick: () -> Unit
 ) {
     Row(
@@ -732,7 +749,8 @@ private fun SettingsNavRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp, horizontal = 4.dp),
+            .padding(vertical = 12.dp, horizontal = 4.dp)
+            .let { if (testTag != null) it.testTag(testTag) else it },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -747,12 +765,22 @@ private fun SettingsNavRow(
                 modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.width(14.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = tint,
-                fontWeight = FontWeight.Medium
-            )
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = tint,
+                    fontWeight = FontWeight.Medium
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AniTextSecondary
+                    )
+                }
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (valueText != null) {
@@ -827,7 +855,7 @@ fun HelpCenterScreen(onBack: () -> Unit) {
         Triple("General", "Do I need an account or login?", "No! AniScroll requires zero registration, login, or cloud accounts. Your watchlist, watch history, playback progress, and ratings are stored 100% locally on your device."),
         Triple("Service", "How do I remove anime from My List?", "Open the My List tab or the Anime Details screen, tap the bookmark or options menu icon on the anime card, and tap Remove from My List."),
         Triple("Video", "How do I switch between SUB and DUB?", "You can select SUB or DUB directly on the Anime Details screen before pressing Play, or switch live inside the Video Player's Audio & Server menu."),
-        Triple("Video", "Why are offline video downloads unavailable?", "The streaming endpoint provides live HLS streams only. To respect content authorization and avoid misleading downloads, AniScroll only streams authorized HLS playback.")
+        Triple("Video", "How do offline HLS downloads work?", "Tap the download icon next to any episode on the Anime Details screen to inspect available 360p, 480p, 720p, or 1080p HLS streams and save them for offline playback in the Downloads screen.")
     )
 
     val filteredFaqs = faqs.filter { (cat, q, a) ->

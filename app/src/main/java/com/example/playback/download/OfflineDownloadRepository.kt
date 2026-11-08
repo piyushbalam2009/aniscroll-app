@@ -333,6 +333,18 @@ class OfflineDownloadRepository(
                 )
             )
         }
+        val media3Download = media3DownloadStack.getMedia3Download(downloadId)
+        if (media3Download != null && media3Download.state == Download.STATE_FAILED) {
+            runCatching {
+                DownloadService.sendAddDownload(
+                    appContext,
+                    AniScrollHlsDownloadService::class.java,
+                    media3Download.request,
+                    /* foreground= */ false
+                )
+            }
+            media3DownloadStack.downloadManager.addDownload(media3Download.request)
+        }
         runCatching {
             DownloadService.sendSetStopReason(
                 appContext,
@@ -381,8 +393,8 @@ class OfflineDownloadRepository(
     }
 
     /**
-     * Checks if `(anilistId, episode, audioType)` has a completed offline download in Room
-     * and returns both the [OfflineDownloadItem] and the Media3 [DownloadRequest] from `DownloadIndex`.
+     * Checks if `(anilistId, episode, audioType)` has a verified, completed offline download in Room
+     * and Media3 `DownloadIndex`. Incomplete, paused, queued, or failed downloads are never marked playable.
      */
     suspend fun getCompletedOfflinePlaybackInfo(
         anilistId: Int,
@@ -392,7 +404,12 @@ class OfflineDownloadRepository(
         val entity = dao.getOfflineDownloadForEpisode(anilistId, episode, audioType) ?: return@withContext null
         val item = entity.toDomain()
         val media3Download = media3DownloadStack.getMedia3Download(item.downloadId)
-        if (item.state == OfflineDownloadState.COMPLETED || media3Download?.state == Download.STATE_COMPLETED) {
+        val isVerifiedComplete = (item.isPlayableOffline || media3Download?.state == Download.STATE_COMPLETED) &&
+            media3Download?.state != Download.STATE_DOWNLOADING &&
+            media3Download?.state != Download.STATE_QUEUED &&
+            media3Download?.state != Download.STATE_STOPPED &&
+            media3Download?.state != Download.STATE_FAILED
+        if (isVerifiedComplete) {
             item.copy(state = OfflineDownloadState.COMPLETED, progressPercent = 100f) to media3Download?.request
         } else {
             null
