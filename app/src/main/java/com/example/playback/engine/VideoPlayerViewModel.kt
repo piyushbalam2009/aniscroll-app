@@ -1,13 +1,20 @@
 package com.example.playback.engine
 
+import androidx.annotation.OptIn
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.C
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.offline.DownloadRequest
+import androidx.media3.ui.AspectRatioFrameLayout
 import com.example.AppContainer
 import com.example.core.common.AppResult
 import com.example.domain.model.Anime
+import com.example.domain.model.OfflineDownloadItem
 import com.example.domain.model.StreamResolution
 import com.example.domain.model.SubtitleTrack
+import com.example.domain.model.VideoDisplayMode
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +23,39 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+/**
+ * Maps [VideoDisplayMode] directly to Media3 [AspectRatioFrameLayout] resizeMode
+ * and [C.VideoScalingMode] with zero manual zoom or custom surface transformations.
+ */
+@OptIn(UnstableApi::class)
+object VideoDisplayModeMapper {
+
+    /**
+     * Maps the 4 supported display modes to Media3 [AspectRatioFrameLayout] resizeMode:
+     * - [VideoDisplayMode.FIT] ("Fit Screen") -> [AspectRatioFrameLayout.RESIZE_MODE_FIT]
+     * - [VideoDisplayMode.FILL] ("Zoom to Fill") -> [AspectRatioFrameLayout.RESIZE_MODE_ZOOM]
+     * - [VideoDisplayMode.STRETCH] ("Stretch") -> [AspectRatioFrameLayout.RESIZE_MODE_FILL]
+     * - [VideoDisplayMode.ORIGINAL] ("Original") -> [AspectRatioFrameLayout.RESIZE_MODE_FIT]
+     */
+    fun toMedia3ResizeMode(displayMode: VideoDisplayMode): Int = when (displayMode) {
+        VideoDisplayMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+        VideoDisplayMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        VideoDisplayMode.STRETCH -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+        VideoDisplayMode.ORIGINAL -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+    }
+
+    /**
+     * Maps [VideoDisplayMode] to Media3 ExoPlayer's [C.VideoScalingMode].
+     */
+    fun toMedia3VideoScalingMode(displayMode: VideoDisplayMode): Int = when (displayMode) {
+        VideoDisplayMode.FILL -> C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+        VideoDisplayMode.FIT,
+        VideoDisplayMode.STRETCH,
+        VideoDisplayMode.ORIGINAL -> C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+    }
+}
+
+@OptIn(UnstableApi::class)
 data class PlayerUiState(
     val anilistId: Int,
     val episode: Int,
@@ -26,6 +66,9 @@ data class PlayerUiState(
     val isLoadingStream: Boolean = true,
     val streamResolution: StreamResolution? = null,
     val activeStreamUrl: String? = null,
+    val isOfflinePlayback: Boolean = false,
+    val offlineDownloadItem: OfflineDownloadItem? = null,
+    val offlineDownloadRequest: DownloadRequest? = null,
     val usedFallbackUrl: Boolean = false,
     val errorMessage: String? = null,
     val savedPositionMs: Long = 0L,
@@ -34,10 +77,12 @@ data class PlayerUiState(
     val playbackSpeed: Float = 1.0f,
     val selectedQualityLabel: String = "Auto (1080p)",
     val maxVideoHeight: Int = Int.MAX_VALUE,
+    val displayMode: VideoDisplayMode = VideoDisplayMode.FIT,
     val isScreenLocked: Boolean = false,
     val sleepTimerRemainingSec: Int? = null
 )
 
+@OptIn(UnstableApi::class)
 class VideoPlayerViewModel(
     private val container: AppContainer,
     initialAnilistId: Int,
@@ -46,6 +91,8 @@ class VideoPlayerViewModel(
     initialTitle: String,
     initialTotalEpisodes: Int
 ) : ViewModel() {
+
+    val media3DownloadStack = container.media3DownloadStack
 
     private val _uiState = MutableStateFlow(
         PlayerUiState(
@@ -68,7 +115,8 @@ class VideoPlayerViewModel(
             val prefs = container.preferencesDataStore.preferencesFlow.first()
             _uiState.value = _uiState.value.copy(
                 playbackSpeed = prefs.defaultPlaybackSpeed,
-                selectedQualityLabel = prefs.defaultVideoQuality
+                selectedQualityLabel = prefs.defaultVideoQuality,
+                displayMode = prefs.defaultDisplayMode
             )
             // Load anime metadata for poster/cover saving
             val detailsRes = container.animeRepository.getAnimeDetails(initialAnilistId)
@@ -97,6 +145,48 @@ class VideoPlayerViewModel(
                 container.historyRepository.getSavedPositionMs(current.anilistId, current.episode)
             } else 0L
 
+            // Check if a completed offline HLS download exists in Media3 SimpleCache & DownloadIndex
+            val offlineInfo = container.offlineDownloadRepository.getCompletedOfflinePlaybackInfo(
+                anilistId = current.anilistId,
+                episode = current.episode,
+                audioType = current.audioType
+            )
+            if (offlineInfo != null) {
+                val (offlineItem, downloadReq) = offlineInfo
+                val defaultOfflineSub = offlineItem.localSubtitleTracks.firstOrNull {
+                    it.lang.contains(prefs.defaultSubtitleLang, ignoreCase = true)
+                } ?: offlineItem.localSubtitleTracks.firstOrNull { it.isDefault }
+                    ?: offlineItem.localSubtitleTracks.firstOrNull()
+
+                val offlineResolution = StreamResolution(
+                    anilistId = offlineItem.anilistId,
+                    episode = offlineItem.episode,
+                    audioType = offlineItem.audioType,
+                    title = offlineItem.animeTitle,
+                    server = "Offline Cache (${offlineItem.qualityLabel})",
+                    availableServers = listOf("Offline Cache (${offlineItem.qualityLabel})"),
+                    hlsUrl = offlineItem.hlsProxyUrl,
+                    hlsProxyUrl = offlineItem.hlsProxyUrl,
+                    fallbackDirectM3u8Url = null,
+                    refererUrl = offlineItem.refererUrl,
+                    subtitles = offlineItem.localSubtitleTracks
+                )
+
+                _uiState.value = _uiState.value.copy(
+                    isLoadingStream = false,
+                    isOfflinePlayback = true,
+                    offlineDownloadItem = offlineItem,
+                    offlineDownloadRequest = downloadReq,
+                    streamResolution = offlineResolution,
+                    activeStreamUrl = offlineItem.hlsProxyUrl,
+                    savedPositionMs = savedPos,
+                    selectedSubtitleTrack = defaultOfflineSub,
+                    selectedQualityLabel = offlineItem.qualityLabel,
+                    errorMessage = null
+                )
+                return@launch
+            }
+
             when (
                 val res = container.aniScrollRepository.resolveEpisodeStream(
                     anilistId = current.anilistId,
@@ -113,6 +203,9 @@ class VideoPlayerViewModel(
 
                     _uiState.value = _uiState.value.copy(
                         isLoadingStream = false,
+                        isOfflinePlayback = false,
+                        offlineDownloadItem = null,
+                        offlineDownloadRequest = null,
                         streamResolution = resolution,
                         activeStreamUrl = resolution.hlsUrl,
                         savedPositionMs = savedPos,
@@ -124,6 +217,7 @@ class VideoPlayerViewModel(
                 is AppResult.Error -> {
                     _uiState.value = _uiState.value.copy(
                         isLoadingStream = false,
+                        isOfflinePlayback = false,
                         errorMessage = res.message
                     )
                 }
@@ -190,6 +284,29 @@ class VideoPlayerViewModel(
             selectedQualityLabel = label,
             maxVideoHeight = maxHeight
         )
+    }
+
+    fun setDisplayMode(mode: VideoDisplayMode) {
+        _uiState.value = _uiState.value.copy(displayMode = mode)
+        viewModelScope.launch {
+            container.preferencesDataStore.setDefaultDisplayMode(mode)
+        }
+    }
+
+    fun toggleZoomToFill() {
+        val nextMode = if (_uiState.value.displayMode == VideoDisplayMode.FILL) {
+            VideoDisplayMode.FIT
+        } else {
+            VideoDisplayMode.FILL
+        }
+        setDisplayMode(nextMode)
+    }
+
+    fun resetDisplayModeToFit() {
+        _uiState.value = _uiState.value.copy(displayMode = VideoDisplayMode.FIT)
+        viewModelScope.launch {
+            container.preferencesDataStore.resetDisplayModeToFit()
+        }
     }
 
     fun toggleScreenLock() {

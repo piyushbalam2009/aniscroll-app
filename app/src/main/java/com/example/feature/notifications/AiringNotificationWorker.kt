@@ -81,8 +81,16 @@ class NotificationScheduler(private val context: Context) {
             ).apply {
                 description = "Local release notifications and app updates"
             }
+            val downloadChannel = NotificationChannel(
+                com.example.playback.download.Media3DownloadStack.DOWNLOAD_NOTIFICATION_CHANNEL_ID,
+                "Offline HLS Downloads",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Progress notifications for Media3 HLS episode downloads"
+            }
             manager.createNotificationChannel(airingChannel)
             manager.createNotificationChannel(generalChannel)
+            manager.createNotificationChannel(downloadChannel)
         }
     }
 

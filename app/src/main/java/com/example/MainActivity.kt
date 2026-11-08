@@ -354,6 +354,7 @@ fun AniScrollAppContent(
                                     onSetDefaultAudio = { mainViewModel.setDefaultAudioType(it) },
                                     onSetDefaultSpeed = { mainViewModel.setDefaultPlaybackSpeed(it) },
                                     onSetDefaultQuality = { mainViewModel.setDefaultVideoQuality(it) },
+                                    onSetDefaultDisplayMode = { mainViewModel.setDefaultDisplayMode(it) },
                                     onSetAutoPlayNext = { mainViewModel.setAutoPlayNextEpisode(it) },
                                     onSetRememberPosition = { mainViewModel.setRememberPlaybackPosition(it) },
                                     onUpdateNotificationPrefs = { general, airing, newEp, appUpd ->
@@ -446,6 +447,8 @@ fun AniScrollAppContent(
             val watchlistIds by mainViewModel.watchlistIds.collectAsState()
             val episodeProgressMap by mainViewModel.observeEpisodeProgress(route.anilistId)
                 .collectAsState(initial = emptyMap())
+            val animeDownloadsMap by mainViewModel.observeAnimeDownloads(route.anilistId)
+                .collectAsState(initial = emptyMap())
             val personalRating by mainViewModel.observePersonalRating(route.anilistId)
                 .collectAsState(initial = null)
 
@@ -457,6 +460,7 @@ fun AniScrollAppContent(
                 state = detailsMap[route.anilistId] ?: AppResult.Loading,
                 inWatchlist = watchlistIds.contains(route.anilistId),
                 episodeProgressMap = episodeProgressMap,
+                animeDownloadsMap = animeDownloadsMap,
                 personalRating = personalRating,
                 defaultAudioType = preferences.defaultAudioType,
                 onBack = { navController.popBackStack() },
@@ -469,6 +473,24 @@ fun AniScrollAppContent(
                 },
                 onSaveRating = { stars ->
                     mainViewModel.savePersonalRating(route.anilistId, stars)
+                },
+                onInspectEpisodeDownload = { anime, ep, audioType ->
+                    mainViewModel.inspectEpisodeForDownload(anime, ep, audioType)
+                },
+                onStartEpisodeDownload = { inspection, variant ->
+                    mainViewModel.startHlsDownload(inspection, variant)
+                },
+                onPauseDownload = { downloadId ->
+                    mainViewModel.pauseDownload(downloadId)
+                },
+                onResumeDownload = { downloadId ->
+                    mainViewModel.resumeDownload(downloadId)
+                },
+                onCancelOrDeleteDownload = { downloadId ->
+                    mainViewModel.cancelOrDeleteDownload(downloadId)
+                },
+                onOpenDownloadsScreen = {
+                    navController.navigate(ScreenRoute.Downloads)
                 },
                 onAnimeClick = { relatedAnime ->
                     navigateToAnime(relatedAnime)
@@ -483,6 +505,8 @@ fun AniScrollAppContent(
             val route = backStackEntry.toRoute<ScreenRoute.MovieDetails>()
             val detailsMap by mainViewModel.animeDetailsMap.collectAsState()
             val watchlistIds by mainViewModel.watchlistIds.collectAsState()
+            val movieDownloadsMap by mainViewModel.observeAnimeDownloads(route.anilistId)
+                .collectAsState(initial = emptyMap())
             val personalRating by mainViewModel.observePersonalRating(route.anilistId)
                 .collectAsState(initial = null)
 
@@ -493,6 +517,7 @@ fun AniScrollAppContent(
             MovieDetailsScreen(
                 state = detailsMap[route.anilistId] ?: AppResult.Loading,
                 inWatchlist = watchlistIds.contains(route.anilistId),
+                movieDownloadsMap = movieDownloadsMap,
                 personalRating = personalRating,
                 defaultAudioType = preferences.defaultAudioType,
                 onBack = { navController.popBackStack() },
@@ -504,6 +529,24 @@ fun AniScrollAppContent(
                     mainViewModel.updateWatchlistStatus(anime, status)
                 },
                 onSaveRating = { stars -> mainViewModel.savePersonalRating(route.anilistId, stars) },
+                onInspectEpisodeDownload = { anime, ep, audioType ->
+                    mainViewModel.inspectEpisodeForDownload(anime, ep, audioType)
+                },
+                onStartEpisodeDownload = { inspection, variant ->
+                    mainViewModel.startHlsDownload(inspection, variant)
+                },
+                onPauseDownload = { downloadId ->
+                    mainViewModel.pauseDownload(downloadId)
+                },
+                onResumeDownload = { downloadId ->
+                    mainViewModel.resumeDownload(downloadId)
+                },
+                onCancelOrDeleteDownload = { downloadId ->
+                    mainViewModel.cancelOrDeleteDownload(downloadId)
+                },
+                onOpenDownloadsScreen = {
+                    navController.navigate(ScreenRoute.Downloads)
+                },
                 onAnimeClick = { related -> navigateToAnime(related) },
                 onRetry = {
                     mainViewModel.loadAnimeDetails(route.anilistId, forceRefresh = true)
@@ -539,7 +582,30 @@ fun AniScrollAppContent(
         }
 
         composable<ScreenRoute.Downloads> {
+            val offlineDownloads by mainViewModel.offlineDownloads.collectAsState()
             DownloadsScreen(
+                downloads = offlineDownloads,
+                onPlayOffline = { item ->
+                    navigateToPlayer(
+                        item.anilistId,
+                        item.episode,
+                        item.audioType,
+                        item.animeTitle,
+                        item.totalEpisodes.coerceAtLeast(item.episode)
+                    )
+                },
+                onPauseDownload = { downloadId ->
+                    mainViewModel.pauseDownload(downloadId)
+                },
+                onResumeDownload = { downloadId ->
+                    mainViewModel.resumeDownload(downloadId)
+                },
+                onCancelOrDeleteDownload = { downloadId ->
+                    mainViewModel.cancelOrDeleteDownload(downloadId)
+                },
+                onClearAllDownloads = {
+                    mainViewModel.clearAllDownloads()
+                },
                 onBack = { navController.popBackStack() }
             )
         }

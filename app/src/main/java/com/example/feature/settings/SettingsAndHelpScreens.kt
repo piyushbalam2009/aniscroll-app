@@ -118,6 +118,7 @@ fun SettingsScreen(
     onSetDefaultAudio: (String) -> Unit,
     onSetDefaultSpeed: (Float) -> Unit,
     onSetDefaultQuality: (String) -> Unit,
+    onSetDefaultDisplayMode: (com.example.domain.model.VideoDisplayMode) -> Unit = {},
     onSetAutoPlayNext: (Boolean) -> Unit,
     onSetRememberPosition: (Boolean) -> Unit,
     onUpdateNotificationPrefs: (Boolean?, Boolean?, Boolean?, Boolean?) -> Unit,
@@ -134,6 +135,7 @@ fun SettingsScreen(
     var showNotifModal by remember { mutableStateOf(false) }
     var showSpeedModal by remember { mutableStateOf(false) }
     var showQualityModal by remember { mutableStateOf(false) }
+    var showDisplayModeModal by remember { mutableStateOf(false) }
     var showSubtitleModal by remember { mutableStateOf(false) }
     var showClearConfirmModal by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
@@ -221,6 +223,12 @@ fun SettingsScreen(
                 title = "Default Video Quality",
                 valueText = preferences.defaultVideoQuality,
                 onClick = { showQualityModal = true }
+            )
+            SettingsNavRow(
+                icon = Icons.Default.PlayCircleOutline,
+                title = "Default Screen Size",
+                valueText = preferences.defaultDisplayMode.displayName,
+                onClick = { showDisplayModeModal = true }
             )
             SettingsNavRow(
                 icon = Icons.Default.PlayCircleOutline,
@@ -492,6 +500,56 @@ fun SettingsScreen(
                         onClick = {
                             onSetDefaultQuality(q)
                             showQualityModal = false
+                        }
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+
+    if (showDisplayModeModal) {
+        ModalBottomSheet(
+            onDismissRequest = { showDisplayModeModal = false },
+            containerColor = AniSecondaryBackground
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "SCREEN SIZE",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = AniTextPrimary
+                    )
+                    TextButton(
+                        onClick = {
+                            onSetDefaultDisplayMode(com.example.domain.model.VideoDisplayMode.FIT)
+                            showDisplayModeModal = false
+                        }
+                    ) {
+                        Text(
+                            text = "Reset to Fit Screen",
+                            color = AniGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                com.example.domain.model.VideoDisplayMode.entries.forEach { mode ->
+                    SelectablePillChip(
+                        text = mode.displayName,
+                        selected = preferences.defaultDisplayMode == mode,
+                        onClick = {
+                            onSetDefaultDisplayMode(mode)
+                            showDisplayModeModal = false
                         }
                     )
                 }

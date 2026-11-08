@@ -101,8 +101,11 @@ data class StreamResolution(
     val server: String,
     val availableServers: List<String>,
     val hlsUrl: String,
-    val fallbackDirectM3u8Url: String?,
-    val refererUrl: String?,
+    val hlsProxyUrl: String? = null,
+    val fallbackDirectM3u8Url: String? = null,
+    val refererUrl: String? = null,
+    val playbackMode: String = "m3u8",
+    val iframeOnly: Boolean = false,
     val subtitles: List<SubtitleTrack>,
     val introStartSec: Int? = null,
     val introEndSec: Int? = null,
@@ -116,6 +119,95 @@ data class SubtitleTrack(
     val lang: String,
     val isDefault: Boolean = false
 )
+
+@Serializable
+data class HlsQualityVariant(
+    val qualityLabel: String, // "360p", "480p", "720p", "1080p"
+    val height: Int,          // 360, 480, 720, 1080
+    val width: Int = 0,
+    val bitrateBps: Int = 0,
+    val codecs: String? = null,
+    val periodIndex: Int = 0,
+    val rendererIndex: Int = 0,
+    val trackGroupIndex: Int = 0,
+    val trackIndex: Int = 0,
+    val isAvailable: Boolean = true
+) {
+    val formattedBandwidth: String
+        get() = if (bitrateBps > 0) {
+            val mbps = bitrateBps / 1_000_000.0
+            if (mbps >= 1.0) String.format(Locale.US, "%.1f Mbps", mbps)
+            else String.format(Locale.US, "%d kbps", bitrateBps / 1000)
+        } else {
+            when (height) {
+                1080 -> "Full HD"
+                720 -> "HD"
+                480 -> "SD"
+                else -> "Data Saver"
+            }
+        }
+}
+
+@Serializable
+data class HlsPlaylistInspection(
+    val anilistId: Int,
+    val episode: Int,
+    val audioType: String,
+    val animeTitle: String,
+    val posterUrl: String,
+    val coverUrl: String? = null,
+    val totalEpisodes: Int,
+    val hlsProxyUrl: String,
+    val refererUrl: String? = null,
+    val isMasterPlaylist: Boolean,
+    val variants: List<HlsQualityVariant>,
+    val subtitles: List<SubtitleTrack>
+)
+
+@Serializable
+enum class OfflineDownloadState(val displayLabel: String) {
+    QUEUED("Queued"),
+    DOWNLOADING("Downloading"),
+    PAUSED("Paused"),
+    COMPLETED("Completed"),
+    FAILED("Failed"),
+    REMOVING("Removing")
+}
+
+@Serializable
+data class OfflineDownloadItem(
+    val downloadId: String,
+    val anilistId: Int,
+    val episode: Int,
+    val totalEpisodes: Int,
+    val audioType: String,
+    val animeTitle: String,
+    val posterUrl: String,
+    val coverUrl: String? = null,
+    val qualityLabel: String,
+    val videoHeight: Int,
+    val hlsProxyUrl: String,
+    val refererUrl: String? = null,
+    val state: OfflineDownloadState,
+    val progressPercent: Float = 0f,
+    val bytesDownloaded: Long = 0L,
+    val contentLengthBytes: Long = 0L,
+    val failureReasonText: String? = null,
+    val localSubtitleTracks: List<SubtitleTrack> = emptyList(),
+    val createdAtMs: Long = System.currentTimeMillis(),
+    val updatedAtMs: Long = System.currentTimeMillis()
+) {
+    val formattedBytesDownloaded: String
+        get() {
+            val mb = bytesDownloaded.toDouble() / (1024.0 * 1024.0)
+            return if (contentLengthBytes > 0L) {
+                val totalMb = contentLengthBytes.toDouble() / (1024.0 * 1024.0)
+                String.format(Locale.US, "%.1f MB / %.1f MB", mb, totalMb)
+            } else {
+                String.format(Locale.US, "%.1f MB", mb)
+            }
+        }
+}
 
 @Serializable
 enum class WatchStatus(val displayName: String) {
@@ -181,6 +273,44 @@ data class LocalNotificationItem(
 )
 
 @Serializable
+enum class VideoDisplayMode(
+    val displayName: String,
+    val description: String
+) {
+    FIT(
+        displayName = "Fit Screen",
+        description = "Show the complete video, preserve aspect ratio, allow black bars."
+    ),
+    FILL(
+        displayName = "Zoom to Fill",
+        description = "Fill the entire available landscape screen, preserve aspect ratio, crop excess content."
+    ),
+    STRETCH(
+        displayName = "Stretch",
+        description = "Fill the entire screen, allow aspect ratio distortion."
+    ),
+    ORIGINAL(
+        displayName = "Original",
+        description = "Preserve original video aspect ratio."
+    );
+
+    companion object {
+        fun fromNameOrDefault(raw: String?): VideoDisplayMode {
+            if (raw.isNullOrBlank()) return FIT
+            if (raw.equals("Fill Screen", ignoreCase = true) ||
+                raw.equals("Zoom to Fill", ignoreCase = true) ||
+                raw.equals("ZOOM", ignoreCase = true)
+            ) {
+                return FILL
+            }
+            return entries.firstOrNull {
+                it.name.equals(raw, ignoreCase = true) || it.displayName.equals(raw, ignoreCase = true)
+            } ?: FIT
+        }
+    }
+}
+
+@Serializable
 data class UserPreferencesState(
     val darkTheme: Boolean = true,
     val appLanguage: String = "English (US)",
@@ -188,6 +318,7 @@ data class UserPreferencesState(
     val defaultAudioType: String = "sub",
     val defaultPlaybackSpeed: Float = 1.0f,
     val defaultVideoQuality: String = "Auto (1080p)",
+    val defaultDisplayMode: VideoDisplayMode = VideoDisplayMode.FIT,
     val autoPlayNextEpisode: Boolean = true,
     val rememberPlaybackPosition: Boolean = true,
     val subtitleFontSizeSp: Float = 18f,
@@ -200,3 +331,4 @@ data class UserPreferencesState(
     val newEpisodeReminders: Boolean = true,
     val appUpdateNotifications: Boolean = true
 )
+

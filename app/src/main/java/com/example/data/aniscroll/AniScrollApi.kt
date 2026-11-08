@@ -58,7 +58,19 @@ object AniScrollResponseAdapter {
         // Direct m3u8 and proxied HLS URL
         val directM3u8 = payload["m3u8"]?.jsonPrimitive?.contentOrNull?.takeIf { it.startsWith("https://") }
             ?: extractFromSourcesArray(payload)
-        val hlsProxyUrl = payload["hlsProxyUrl"]?.jsonPrimitive?.contentOrNull?.takeIf { it.startsWith("https://") }
+        val rawProxyUrl = payload["hlsProxyUrl"]?.jsonPrimitive?.contentOrNull
+            ?: payload["hlsproxyurl"]?.jsonPrimitive?.contentOrNull
+            ?: payload["hls_proxy_url"]?.jsonPrimitive?.contentOrNull
+
+        val hlsProxyUrl = when {
+            rawProxyUrl.isNullOrBlank() -> null
+            rawProxyUrl.startsWith("https://") -> rawProxyUrl
+            rawProxyUrl.startsWith("/") -> "https://api.aniscroll.in$rawProxyUrl"
+            else -> null
+        }
+
+        val playbackMode = payload["playbackMode"]?.jsonPrimitive?.contentOrNull ?: "m3u8"
+        val iframeOnly = payload["iframeOnly"]?.jsonPrimitive?.booleanOrNull ?: false
 
         // Prefer directM3u8 with Referer header or hlsProxyUrl; keep the other as automatic fallback
         val primaryHls = directM3u8 ?: hlsProxyUrl
@@ -109,8 +121,11 @@ object AniScrollResponseAdapter {
             server = server,
             availableServers = availableServers,
             hlsUrl = primaryHls,
+            hlsProxyUrl = hlsProxyUrl,
             fallbackDirectM3u8Url = fallbackHls,
             refererUrl = refererUrl,
+            playbackMode = playbackMode,
+            iframeOnly = iframeOnly,
             subtitles = subtitles,
             introStartSec = introObj?.get("start")?.jsonPrimitive?.intOrNull,
             introEndSec = introObj?.get("end")?.jsonPrimitive?.intOrNull,

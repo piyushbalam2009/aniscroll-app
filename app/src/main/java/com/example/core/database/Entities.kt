@@ -109,3 +109,28 @@ data class PersonalRatingEntity(
     val ratingStars: Float,
     val ratedAtMs: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "offline_downloads")
+data class OfflineDownloadEntity(
+    @PrimaryKey val downloadId: String,
+    val anilistId: Int,
+    val episode: Int,
+    val totalEpisodes: Int,
+    val audioType: String,
+    val animeTitle: String,
+    val posterUrl: String,
+    val coverUrl: String?,
+    val qualityLabel: String,
+    val videoHeight: Int,
+    val hlsProxyUrl: String,
+    val refererUrl: String?,
+    val state: String,
+    val progressPercent: Float,
+    val bytesDownloaded: Long,
+    val contentLengthBytes: Long,
+    val failureReasonText: String?,
+    val localSubtitlesJson: String,
+    val createdAtMs: Long,
+    val updatedAtMs: Long
+)
+

@@ -6,7 +6,9 @@ import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.Build
 import android.util.Rational
+import android.view.LayoutInflater
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
@@ -16,6 +18,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -33,13 +36,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.AspectRatio
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.CropFree
+import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
@@ -57,7 +66,9 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -90,6 +101,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
@@ -100,26 +114,29 @@ import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.example.R
 import com.example.core.common.TimeUtils
 import com.example.core.designsystem.GreenPrimaryButton
 import com.example.core.designsystem.SelectablePillChip
 import com.example.core.designsystem.SpinningDotsLoader
 import com.example.domain.model.UserPreferencesState
+import com.example.domain.model.VideoDisplayMode
+import com.example.playback.engine.VideoDisplayModeMapper
 import com.example.playback.engine.VideoPlayerViewModel
 import com.example.ui.theme.AniBackground
+import com.example.ui.theme.AniBorder
 import com.example.ui.theme.AniCardBackground
 import com.example.ui.theme.AniGreen
+import com.example.ui.theme.AniGreenSurface
 import com.example.ui.theme.AniSecondaryBackground
 import com.example.ui.theme.AniTextPrimary
 import com.example.ui.theme.AniTextSecondary
 import kotlinx.coroutines.delay
 
 private enum class PlayerSheetType {
-    NONE, SPEED, SUBTITLES, QUALITY, AUDIO_SERVER, SLEEP_TIMER
+    NONE, SCREEN_SIZE, SPEED, SUBTITLES, QUALITY, AUDIO_SERVER, SLEEP_TIMER
 }
 
 @OptIn(UnstableApi::class)
@@ -146,22 +163,76 @@ fun VideoPlayerScreen(
     var currentPositionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
     var activeCueText by remember { mutableStateOf("") }
+    var transientHudBadge by remember { mutableStateOf<String?>(null) }
 
-    // Set landscape orientation on enter, restore portrait on exit
-    DisposableEffect(isLandscape) {
+    // Auto-clear transient HUD badge
+    LaunchedEffect(transientHudBadge) {
+        if (transientHudBadge != null) {
+            delay(1300L)
+            transientHudBadge = null
+        }
+    }
+
+    // Configure true edge-to-edge fullscreen landscape window & display cutout mode
+    // so Android never adds black status/navigation letterbox bars on the left or right sides.
+    DisposableEffect(activity, isLandscape) {
+        val window = activity?.window
+        val previousCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && window != null) {
+            window.attributes.layoutInDisplayCutoutMode
+        } else 0
+
         activity?.requestedOrientation = if (isLandscape) {
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         } else {
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
+
+        if (window != null) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val lp = window.attributes
+                lp.layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                } else {
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+                window.attributes = lp
+            }
+            val controller = WindowInsetsControllerCompat(window, window.decorView)
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+        }
+
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            if (window != null) {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val lp = window.attributes
+                    lp.layoutInDisplayCutoutMode = previousCutoutMode
+                    window.attributes = lp
+                }
+                val controller = WindowInsetsControllerCompat(window, window.decorView)
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
         }
+    }
+
+    // Keep system bars hidden in fullscreen player
+    LaunchedEffect(showControls, activeSheet) {
+        val window = activity?.window ?: return@LaunchedEffect
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
     }
 
     val exoPlayer = remember(context) {
         ExoPlayer.Builder(context).build().apply {
             playWhenReady = true
+            videoScalingMode = C.VIDEO_SCALING_MODE_SCALE_TO_FIT
         }
     }
 
@@ -207,23 +278,40 @@ fun VideoPlayerScreen(
         }
     }
 
-    // Load or update HLS stream & selected subtitle configuration
-    LaunchedEffect(uiState.activeStreamUrl, uiState.selectedSubtitleTrack) {
+    // Load or update HLS stream (online or offline from SimpleCache) & selected subtitle configuration without recreating ExoPlayer
+    LaunchedEffect(
+        uiState.activeStreamUrl,
+        uiState.selectedSubtitleTrack,
+        uiState.isOfflinePlayback,
+        uiState.offlineDownloadRequest
+    ) {
         val streamUrl = uiState.activeStreamUrl ?: return@LaunchedEffect
         val referer = uiState.streamResolution?.refererUrl ?: "https://megaplay.buzz/"
 
-        val headers = mapOf(
-            "Referer" to referer,
-            "Origin" to referer.trimEnd('/'),
-            "User-Agent" to "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124.0.0.0 Mobile Safari/537.36"
-        )
-        val dataSourceFactory = DefaultHttpDataSource.Factory()
-            .setDefaultRequestProperties(headers)
-            .setAllowCrossProtocolRedirects(true)
+        val dataSourceFactory = if (uiState.isOfflinePlayback) {
+            viewModel.media3DownloadStack.createOfflinePlaybackDataSourceFactory(
+                refererUrl = referer,
+                hlsProxyUrl = streamUrl
+            )
+        } else {
+            val headers = mapOf(
+                "Referer" to referer,
+                "Origin" to referer.trimEnd('/'),
+                "User-Agent" to "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124.0.0.0 Mobile Safari/537.36"
+            )
+            DefaultHttpDataSource.Factory()
+                .setDefaultRequestProperties(headers)
+                .setAllowCrossProtocolRedirects(true)
+        }
 
-        val mediaItemBuilder = MediaItem.Builder()
-            .setUri(Uri.parse(streamUrl))
-            .setMimeType(MimeTypes.APPLICATION_M3U8)
+        val mediaItemBuilder = if (uiState.isOfflinePlayback && uiState.offlineDownloadRequest != null) {
+            uiState.offlineDownloadRequest!!.toMediaItem().buildUpon()
+                .setMimeType(MimeTypes.APPLICATION_M3U8)
+        } else {
+            MediaItem.Builder()
+                .setUri(Uri.parse(streamUrl))
+                .setMimeType(MimeTypes.APPLICATION_M3U8)
+        }
 
         val selectedSub = uiState.selectedSubtitleTrack
         if (selectedSub != null) {
@@ -267,6 +355,11 @@ fun VideoPlayerScreen(
         exoPlayer.trackSelectionParameters = params
     }
 
+    // Apply Media3 videoScalingMode when displayMode changes without recreating ExoPlayer
+    LaunchedEffect(uiState.displayMode) {
+        exoPlayer.videoScalingMode = VideoDisplayModeMapper.toMedia3VideoScalingMode(uiState.displayMode)
+    }
+
     // Periodic progress tracker & 12-second Room auto-save
     LaunchedEffect(exoPlayer) {
         var tickCount = 0
@@ -280,6 +373,11 @@ fun VideoPlayerScreen(
             }
             delay(500L)
         }
+    }
+
+    // Map selected display mode directly to Media3 AspectRatioFrameLayout.RESIZE_MODE_*
+    val targetResizeMode = remember(uiState.displayMode) {
+        VideoDisplayModeMapper.toMedia3ResizeMode(uiState.displayMode)
     }
 
     BackHandler {
@@ -303,26 +401,39 @@ fun VideoPlayerScreen(
             }
             .testTag("video_player_screen")
     ) {
-        // Media3 PlayerView Surface
+        // Media3 PlayerView occupying the entire available landscape video viewport.
+        // Uses AspectRatioFrameLayout.RESIZE_MODE_ZOOM for "Zoom to Fill" so the actual video
+        // expands edge-to-edge across the entire screen and eliminates external black side bars,
+        // with zero additional manual scaling transformations.
         AndroidView(
             factory = { ctx ->
-                PlayerView(ctx).apply {
+                (LayoutInflater.from(ctx).inflate(
+                    R.layout.exo_texture_player_view,
+                    null,
+                    false
+                ) as PlayerView).apply {
                     player = exoPlayer
                     useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    subtitleView?.alpha = 0f // We render custom styled subtitle overlay below
+                    resizeMode = targetResizeMode
+                    subtitleView?.alpha = 0f // Custom styled subtitle overlay is rendered independently below
                     layoutParams = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
                 }
             },
-            update = { view ->
-                if (view.player !== exoPlayer) {
-                    view.player = exoPlayer
+            update = { playerView ->
+                if (playerView.player !== exoPlayer) {
+                    playerView.player = exoPlayer
+                }
+                if (playerView.resizeMode != targetResizeMode) {
+                    playerView.resizeMode = targetResizeMode
+                    playerView.requestLayout()
                 }
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag("video_surface_container")
         )
 
         // Custom Styled Subtitle Overlay
@@ -338,6 +449,7 @@ fun VideoPlayerScreen(
                     .clip(RoundedCornerShape(8.dp))
                     .background(Color.Black.copy(alpha = prefs.subtitleBackgroundOpacity))
                     .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .testTag("player_subtitle_overlay")
             ) {
                 Text(
                     text = activeCueText,
@@ -346,6 +458,70 @@ fun VideoPlayerScreen(
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center
                 )
+            }
+        }
+
+        // Transient Display Mode HUD Indicator
+        AnimatedVisibility(
+            visible = transientHudBadge != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 72.dp)
+        ) {
+            Surface(
+                color = AniSecondaryBackground.copy(alpha = 0.92f),
+                shape = RoundedCornerShape(50),
+                modifier = Modifier
+                    .border(1.dp, AniGreen, RoundedCornerShape(50))
+                    .testTag("player_display_mode_hud_badge")
+            ) {
+                Text(
+                    text = transientHudBadge.orEmpty(),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = AniGreen,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
+                )
+            }
+        }
+
+        // Skip Intro Floating Button when inside intro window
+        val currentSec = (currentPositionMs / 1000L).toInt()
+        val introStart = uiState.streamResolution?.introStartSec
+        val introEnd = uiState.streamResolution?.introEndSec
+        if (introStart != null && introEnd != null && currentSec in introStart until introEnd && !uiState.isScreenLocked) {
+            Surface(
+                color = AniGreen,
+                shape = RoundedCornerShape(50),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 24.dp, bottom = if (showControls) 110.dp else 36.dp)
+                    .clickable {
+                        exoPlayer.seekTo(introEnd * 1000L)
+                        currentPositionMs = introEnd * 1000L
+                    }
+                    .testTag("player_skip_intro_button")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SkipNext,
+                        contentDescription = "Skip Intro",
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Skip Intro",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
 
@@ -398,7 +574,7 @@ fun VideoPlayerScreen(
             }
         }
 
-        // Player Controls Overlay matching Screenshots 40, 41, 43
+        // Player Controls Overlay
         AnimatedVisibility(
             visible = showControls,
             enter = fadeIn(),
@@ -439,7 +615,7 @@ fun VideoPlayerScreen(
                             )
                         )
                 ) {
-                    // Top Controls Row (Back + Episode Title + Speed, Timer, Subtitles, Episodes, PiP, More)
+                    // Top Controls Row (Back + Episode Title + Screen Size, Speed, Timer, Subtitles, Episodes, PiP, More)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -474,8 +650,11 @@ fun VideoPlayerScreen(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                                val offlineBadge = if (uiState.isOfflinePlayback) {
+                                    " • OFFLINE (${uiState.offlineDownloadItem?.qualityLabel ?: "Cached"})"
+                                } else ""
                                 Text(
-                                    text = "Episode ${uiState.episode} • ${uiState.audioType.uppercase()} • ${uiState.selectedQualityLabel}",
+                                    text = "Episode ${uiState.episode} • ${uiState.audioType.uppercase()}$offlineBadge • ${uiState.displayMode.displayName}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = AniGreen
                                 )
@@ -483,6 +662,16 @@ fun VideoPlayerScreen(
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(
+                                onClick = { activeSheet = PlayerSheetType.SCREEN_SIZE },
+                                modifier = Modifier.testTag("player_screen_size_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AspectRatio,
+                                    contentDescription = "Screen Size",
+                                    tint = if (uiState.displayMode != VideoDisplayMode.FIT) AniGreen else Color.White
+                                )
+                            }
                             IconButton(
                                 onClick = { activeSheet = PlayerSheetType.SPEED },
                                 modifier = Modifier.testTag("player_speed_button")
@@ -555,7 +744,7 @@ fun VideoPlayerScreen(
                         }
                     }
 
-                    // Bottom Seek Bar + Transport Controls matching Screenshots 40 & 43
+                    // Bottom Seek Bar + Transport Controls
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -708,8 +897,46 @@ fun VideoPlayerScreen(
                                 }
                             }
 
-                            // Right: Quality + Fullscreen orientation toggle
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Right: Screen Size chip + Quality + One-Tap Zoom to Fill toggle
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Surface(
+                                    color = if (uiState.displayMode == VideoDisplayMode.FILL) {
+                                        AniGreenSurface
+                                    } else {
+                                        AniCardBackground.copy(alpha = 0.85f)
+                                    },
+                                    shape = RoundedCornerShape(50),
+                                    modifier = Modifier
+                                        .border(
+                                            width = 1.dp,
+                                            color = if (uiState.displayMode == VideoDisplayMode.FILL) AniGreen else Color.Transparent,
+                                            shape = RoundedCornerShape(50)
+                                        )
+                                        .clickable { activeSheet = PlayerSheetType.SCREEN_SIZE }
+                                        .testTag("player_bottom_screen_size_chip")
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.FitScreen,
+                                            contentDescription = "Screen Size",
+                                            tint = AniGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = uiState.displayMode.displayName,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
                                 IconButton(
                                     onClick = { activeSheet = PlayerSheetType.QUALITY },
                                     modifier = Modifier.testTag("player_quality_button")
@@ -721,13 +948,21 @@ fun VideoPlayerScreen(
                                     )
                                 }
                                 IconButton(
-                                    onClick = { isLandscape = !isLandscape },
+                                    onClick = {
+                                        val nextLabel = if (uiState.displayMode == VideoDisplayMode.FILL) {
+                                            "Fit Screen"
+                                        } else {
+                                            "Zoom to Fill"
+                                        }
+                                        viewModel.toggleZoomToFill()
+                                        transientHudBadge = nextLabel
+                                    },
                                     modifier = Modifier.testTag("player_fullscreen_button")
                                 ) {
                                     Icon(
-                                        imageVector = if (isLandscape) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                        contentDescription = "Toggle Orientation",
-                                        tint = Color.White
+                                        imageVector = if (uiState.displayMode == VideoDisplayMode.FILL) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                        contentDescription = "Toggle Zoom to Fill",
+                                        tint = if (uiState.displayMode == VideoDisplayMode.FILL) AniGreen else Color.White
                                     )
                                 }
                             }
@@ -737,7 +972,7 @@ fun VideoPlayerScreen(
             }
         }
 
-        // Right-side Episode Drawer matching Screenshot 41_Dark_anime episode details, play episode option
+        // Right-side Episode Drawer
         AnimatedVisibility(
             visible = showEpisodeDrawer,
             enter = slideInHorizontally(initialOffsetX = { it }),
@@ -825,20 +1060,33 @@ fun VideoPlayerScreen(
         }
     }
 
-    // Settings Bottom Sheets for Speed, Subtitles, Quality, Audio/Server, Sleep Timer
+    // Bottom Sheets for SCREEN SIZE, Speed, Subtitles, Quality, Audio/Server, Sleep Timer
     if (activeSheet != PlayerSheetType.NONE) {
         ModalBottomSheet(
             onDismissRequest = { activeSheet = PlayerSheetType.NONE },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = AniSecondaryBackground
+            containerColor = AniSecondaryBackground,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 14.dp),
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 when (activeSheet) {
+                    PlayerSheetType.SCREEN_SIZE -> {
+                        ScreenSizeBottomSheetContent(
+                            selectedMode = uiState.displayMode,
+                            onSelectMode = { mode ->
+                                viewModel.setDisplayMode(mode)
+                                transientHudBadge = mode.displayName
+                                activeSheet = PlayerSheetType.NONE
+                            }
+                        )
+                    }
+
                     PlayerSheetType.SPEED -> {
                         Text(
                             text = "Playback Speed",
@@ -949,7 +1197,7 @@ fun VideoPlayerScreen(
 
                     PlayerSheetType.AUDIO_SERVER -> {
                         Text(
-                            text = "Audio & Streaming Server",
+                            text = "Player Settings & Audio",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = AniTextPrimary
@@ -972,10 +1220,53 @@ fun VideoPlayerScreen(
                                 }
                             )
                         }
-                        Spacer(modifier = Modifier.height(6.dp))
+                        HorizontalDivider(color = AniBorder)
+                        // Show selected Screen Size mode in Player Settings
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(AniCardBackground)
+                                .clickable { activeSheet = PlayerSheetType.SCREEN_SIZE }
+                                .padding(horizontal = 16.dp, vertical = 14.dp)
+                                .testTag("player_settings_screen_size_row"),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AspectRatio,
+                                    contentDescription = null,
+                                    tint = AniGreen
+                                )
+                                Column {
+                                    Text(
+                                        text = "Screen Size",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = AniTextPrimary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Fit Screen, Zoom to Fill, Stretch, or Original",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = AniTextSecondary
+                                    )
+                                }
+                            }
+                            Text(
+                                text = uiState.displayMode.displayName,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = AniGreen,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Active Server: ${uiState.streamResolution?.server ?: "MegaPlay Direct"}",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             color = AniGreen
                         )
                     }
@@ -1007,6 +1298,99 @@ fun VideoPlayerScreen(
                     PlayerSheetType.NONE -> Unit
                 }
                 Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScreenSizeBottomSheetContent(
+    selectedMode: VideoDisplayMode,
+    onSelectMode: (VideoDisplayMode) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("screen_size_bottom_sheet"),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column {
+            Text(
+                text = "SCREEN SIZE",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = AniTextPrimary
+            )
+            Text(
+                text = "Select Zoom to Fill to expand video edge-to-edge and remove black side bars",
+                style = MaterialTheme.typography.bodySmall,
+                color = AniTextSecondary
+            )
+        }
+
+        HorizontalDivider(color = AniBorder)
+
+        // Display Modes list: Fit Screen, Zoom to Fill, Stretch, Original
+        VideoDisplayMode.entries.forEach { mode ->
+            val isSelected = selectedMode == mode
+            val icon = when (mode) {
+                VideoDisplayMode.FIT -> Icons.Default.FitScreen
+                VideoDisplayMode.FILL -> Icons.Default.Fullscreen
+                VideoDisplayMode.STRETCH -> Icons.Default.ZoomOutMap
+                VideoDisplayMode.ORIGINAL -> Icons.Default.CropFree
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (isSelected) AniGreenSurface else AniCardBackground)
+                    .border(
+                        width = if (isSelected) 1.5.dp else 1.dp,
+                        color = if (isSelected) AniGreen else AniBorder,
+                        shape = RoundedCornerShape(14.dp)
+                    )
+                    .clickable { onSelectMode(mode) }
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
+                    .testTag("display_mode_${mode.name.lowercase()}"),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = mode.displayName,
+                        tint = if (isSelected) AniGreen else AniTextSecondary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Column {
+                        Text(
+                            text = mode.displayName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSelected) AniGreen else AniTextPrimary
+                        )
+                        Text(
+                            text = mode.description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AniTextSecondary
+                        )
+                    }
+                }
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Selected",
+                        tint = AniGreen,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .testTag("selected_checkmark_${mode.name.lowercase()}")
+                    )
+                }
             }
         }
     }

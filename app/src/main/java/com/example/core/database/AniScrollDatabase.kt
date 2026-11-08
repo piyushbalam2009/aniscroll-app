@@ -144,6 +144,31 @@ interface AniScrollDao {
     @Query("SELECT * FROM personal_ratings")
     suspend fun getAllRatingsSnapshot(): List<PersonalRatingEntity>
 
+    // Offline HLS Downloads
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOfflineDownload(download: OfflineDownloadEntity)
+
+    @Query("SELECT * FROM offline_downloads ORDER BY createdAtMs DESC")
+    fun observeAllOfflineDownloads(): Flow<List<OfflineDownloadEntity>>
+
+    @Query("SELECT * FROM offline_downloads ORDER BY createdAtMs DESC")
+    suspend fun getAllOfflineDownloadsSnapshot(): List<OfflineDownloadEntity>
+
+    @Query("SELECT * FROM offline_downloads WHERE downloadId = :downloadId LIMIT 1")
+    suspend fun getOfflineDownloadById(downloadId: String): OfflineDownloadEntity?
+
+    @Query("SELECT * FROM offline_downloads WHERE anilistId = :anilistId AND episode = :episode AND LOWER(audioType) = LOWER(:audioType) LIMIT 1")
+    suspend fun getOfflineDownloadForEpisode(anilistId: Int, episode: Int, audioType: String): OfflineDownloadEntity?
+
+    @Query("SELECT * FROM offline_downloads WHERE anilistId = :anilistId ORDER BY episode ASC")
+    fun observeOfflineDownloadsForAnime(anilistId: Int): Flow<List<OfflineDownloadEntity>>
+
+    @Query("DELETE FROM offline_downloads WHERE downloadId = :downloadId")
+    suspend fun deleteOfflineDownloadById(downloadId: String)
+
+    @Query("DELETE FROM offline_downloads")
+    suspend fun clearAllOfflineDownloads()
+
     // Clear all user data
     @Query("DELETE FROM watchlist")
     suspend fun clearWatchlist()
@@ -172,9 +197,10 @@ interface AniScrollDao {
         EpisodeEntity::class,
         ScheduleEntity::class,
         RecentSearchEntity::class,
-        PersonalRatingEntity::class
+        PersonalRatingEntity::class,
+        OfflineDownloadEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AniScrollDatabase : RoomDatabase() {
@@ -191,7 +217,7 @@ abstract class AniScrollDatabase : RoomDatabase() {
                     AniScrollDatabase::class.java,
                     "aniscroll_local.db"
                 )
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration(true)
                     .build()
                     .also { INSTANCE = it }
             }

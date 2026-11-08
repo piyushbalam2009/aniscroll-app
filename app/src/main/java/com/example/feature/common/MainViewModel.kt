@@ -9,6 +9,9 @@ import com.example.core.common.AppResult
 import com.example.domain.model.AiringScheduleItem
 import com.example.domain.model.Anime
 import com.example.domain.model.AnimeFilterState
+import com.example.domain.model.HlsPlaylistInspection
+import com.example.domain.model.HlsQualityVariant
+import com.example.domain.model.OfflineDownloadItem
 import com.example.domain.model.UserPreferencesState
 import com.example.domain.model.WatchHistoryItem
 import com.example.domain.model.WatchStatus
@@ -91,6 +94,10 @@ class MainViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val continueWatching: StateFlow<List<WatchHistoryItem>> = container.historyRepository.observeContinueWatching()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Offline HLS Downloads
+    val offlineDownloads: StateFlow<List<OfflineDownloadItem>> = container.offlineDownloadRepository.observeAllDownloads()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Details Cache Map
@@ -261,6 +268,55 @@ class MainViewModel(
     fun observeEpisodeProgress(anilistId: Int) =
         container.historyRepository.observeEpisodeProgress(anilistId)
 
+    fun observeAnimeDownloads(anilistId: Int) =
+        container.offlineDownloadRepository.observeDownloadsForAnime(anilistId)
+
+    suspend fun inspectEpisodeForDownload(
+        anime: Anime,
+        episode: Int,
+        audioType: String
+    ): AppResult<HlsPlaylistInspection> {
+        return container.offlineDownloadRepository.inspectEpisodeForDownload(
+            anime = anime,
+            episode = episode,
+            audioType = audioType
+        )
+    }
+
+    suspend fun startHlsDownload(
+        inspection: HlsPlaylistInspection,
+        selectedVariant: HlsQualityVariant
+    ): AppResult<OfflineDownloadItem> {
+        return container.offlineDownloadRepository.startHlsDownload(
+            inspection = inspection,
+            selectedVariant = selectedVariant
+        )
+    }
+
+    fun pauseDownload(downloadId: String) {
+        viewModelScope.launch {
+            container.offlineDownloadRepository.pauseDownload(downloadId)
+        }
+    }
+
+    fun resumeDownload(downloadId: String) {
+        viewModelScope.launch {
+            container.offlineDownloadRepository.resumeDownload(downloadId)
+        }
+    }
+
+    fun cancelOrDeleteDownload(downloadId: String) {
+        viewModelScope.launch {
+            container.offlineDownloadRepository.cancelOrDeleteDownload(downloadId)
+        }
+    }
+
+    fun clearAllDownloads() {
+        viewModelScope.launch {
+            container.offlineDownloadRepository.clearAllDownloads()
+        }
+    }
+
     fun observePersonalRating(anilistId: Int) =
         container.animeRepository.observePersonalRating(anilistId)
 
@@ -358,6 +414,10 @@ class MainViewModel(
 
     fun setDefaultVideoQuality(quality: String) {
         viewModelScope.launch { container.preferencesDataStore.setDefaultVideoQuality(quality) }
+    }
+
+    fun setDefaultDisplayMode(mode: com.example.domain.model.VideoDisplayMode) {
+        viewModelScope.launch { container.preferencesDataStore.setDefaultDisplayMode(mode) }
     }
 
     fun setAutoPlayNextEpisode(enabled: Boolean) {

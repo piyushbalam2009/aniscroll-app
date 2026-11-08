@@ -26,6 +26,8 @@ import com.example.domain.repository.KitsuRepository
 import com.example.domain.repository.ScheduleRepository
 import com.example.domain.repository.WatchlistRepository
 import com.example.feature.notifications.NotificationScheduler
+import com.example.playback.download.Media3DownloadStack
+import com.example.playback.download.OfflineDownloadRepository
 import okhttp3.OkHttpClient
 
 class AppContainer(context: Application) {
@@ -36,6 +38,7 @@ class AppContainer(context: Application) {
     val preferencesDataStore = UserPreferencesDataStore(context)
     val backupManager = LocalBackupManager(dao)
     val notificationScheduler = NotificationScheduler(context)
+    val media3DownloadStack = Media3DownloadStack(context)
 
     private val aniListService: AniListService = NetworkClient.createService(
         baseUrl = "https://graphql.anilist.co/",
@@ -68,6 +71,14 @@ class AppContainer(context: Application) {
     val watchlistRepository: WatchlistRepository = WatchlistRepositoryImpl(dao)
     val historyRepository: HistoryRepository = HistoryRepositoryImpl(dao)
     val scheduleRepository: ScheduleRepository = ScheduleRepositoryImpl(aniListRepository)
+
+    val offlineDownloadRepository: OfflineDownloadRepository = OfflineDownloadRepository(
+        appContext = context,
+        dao = dao,
+        aniScrollRepository = aniScrollRepository,
+        okHttpClient = okHttpClient,
+        media3DownloadStack = media3DownloadStack
+    )
 }
 
 class AniScrollApp : Application(), ImageLoaderFactory {

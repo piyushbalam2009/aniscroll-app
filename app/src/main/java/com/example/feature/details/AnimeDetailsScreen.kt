@@ -81,6 +81,10 @@ import com.example.core.designsystem.GreenPrimaryButton
 import com.example.core.designsystem.SelectablePillChip
 import com.example.core.designsystem.SpinningDotsLoader
 import com.example.domain.model.Anime
+import com.example.domain.model.HlsPlaylistInspection
+import com.example.domain.model.HlsQualityVariant
+import com.example.domain.model.OfflineDownloadItem
+import com.example.domain.model.OfflineDownloadState
 import com.example.domain.model.WatchHistoryItem
 import com.example.domain.model.WatchStatus
 import com.example.ui.theme.AniBackground
@@ -98,6 +102,7 @@ fun AnimeDetailsScreen(
     state: AppResult<Anime>,
     inWatchlist: Boolean,
     episodeProgressMap: Map<Int, WatchHistoryItem>,
+    animeDownloadsMap: Map<Int, OfflineDownloadItem> = emptyMap(),
     personalRating: Float?,
     defaultAudioType: String,
     onBack: () -> Unit,
@@ -105,6 +110,16 @@ fun AnimeDetailsScreen(
     onToggleWatchlist: (Anime) -> Unit,
     onSetWatchStatus: (Anime, WatchStatus) -> Unit,
     onSaveRating: (Float) -> Unit,
+    onInspectEpisodeDownload: suspend (Anime, Int, String) -> AppResult<HlsPlaylistInspection> = { _, _, _ ->
+        AppResult.Error("Offline download inspector not configured.")
+    },
+    onStartEpisodeDownload: suspend (HlsPlaylistInspection, HlsQualityVariant) -> AppResult<OfflineDownloadItem> = { _, _ ->
+        AppResult.Error("Offline download manager not configured.")
+    },
+    onPauseDownload: (String) -> Unit = {},
+    onResumeDownload: (String) -> Unit = {},
+    onCancelOrDeleteDownload: (String) -> Unit = {},
+    onOpenDownloadsScreen: () -> Unit = {},
     onAnimeClick: (Anime) -> Unit,
     onRetry: () -> Unit
 ) {
@@ -116,6 +131,7 @@ fun AnimeDetailsScreen(
     var showShareSheet by remember { mutableStateOf(false) }
     var showStatusSheet by remember { mutableStateOf(false) }
     var showDownloadInfoSheet by remember { mutableStateOf(false) }
+    var downloadSheetInitialEpisode by remember { mutableIntStateOf(1) }
     var selectedChunkIndex by remember { mutableIntStateOf(0) }
 
     when (state) {
@@ -385,7 +401,10 @@ fun AnimeDetailsScreen(
                             GreenOutlinedButton(
                                 text = "Download",
                                 icon = Icons.Default.Download,
-                                onClick = { showDownloadInfoSheet = true },
+                                onClick = {
+                                    downloadSheetInitialEpisode = resumeEpisode
+                                    showDownloadInfoSheet = true
+                                },
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(48.dp),
@@ -501,12 +520,18 @@ fun AnimeDetailsScreen(
                         items(currentChunk, key = { "ep_$it" }) { epNum ->
                             val epMeta = metaByNum[epNum]
                             val progressItem = episodeProgressMap[epNum]
+                            val downloadItem = animeDownloadsMap[epNum]
                             EpisodeThumbnailCard(
                                 episodeNumber = epNum,
                                 episodeTitle = epMeta?.title ?: "Episode $epNum",
                                 thumbnailUrl = epMeta?.thumbnailUrl ?: anime.coverUrl ?: anime.posterUrl,
                                 progressFraction = progressItem?.progressFraction ?: 0f,
                                 isCompleted = progressItem?.isCompleted == true,
+                                downloadState = downloadItem?.state,
+                                onDownloadClick = {
+                                    downloadSheetInitialEpisode = epNum
+                                    showDownloadInfoSheet = true
+                                },
                                 onClick = {
                                     onPlayEpisode(
                                         epNum,
@@ -706,42 +731,25 @@ fun AnimeDetailsScreen(
             }
 
             if (showDownloadInfoSheet) {
-                ModalBottomSheet(
-                    onDismissRequest = { showDownloadInfoSheet = false },
-                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-                    containerColor = AniSecondaryBackground
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Offline Download Unavailable",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = AniTextPrimary
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "The AniScroll streaming endpoint (api.aniscroll.in) provides authorized live HLS streams only and does not currently provide offline downloadable files. You can stream all episodes immediately in SUB or DUB using the Play button.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AniTextSecondary
-                        )
-                        Spacer(modifier = Modifier.height(20.dp))
-                        GreenPrimaryButton(
-                            text = "Stream Episode Now",
-                            icon = Icons.Default.PlayArrow,
-                            onClick = {
-                                showDownloadInfoSheet = false
-                                onPlayEpisode(resumeEpisode, selectedAudioType, anime.displayTitle, totalEps)
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-                }
+                HlsDownloadEpisodeSheet(
+                    anime = anime,
+                    initialEpisode = downloadSheetInitialEpisode,
+                    initialAudioType = selectedAudioType,
+                    existingDownloads = animeDownloadsMap,
+                    onInspectEpisodeDownload = onInspectEpisodeDownload,
+                    onStartEpisodeDownload = onStartEpisodeDownload,
+                    onPauseDownload = onPauseDownload,
+                    onResumeDownload = onResumeDownload,
+                    onCancelOrDeleteDownload = onCancelOrDeleteDownload,
+                    onPlayOfflineEpisode = { ep, audioType ->
+                        onPlayEpisode(ep, audioType, anime.displayTitle, totalEps)
+                    },
+                    onStreamOnlineEpisode = { ep, audioType ->
+                        onPlayEpisode(ep, audioType, anime.displayTitle, totalEps)
+                    },
+                    onOpenDownloadsScreen = onOpenDownloadsScreen,
+                    onDismiss = { showDownloadInfoSheet = false }
+                )
             }
         }
     }
@@ -770,6 +778,8 @@ fun EpisodeThumbnailCard(
     thumbnailUrl: String,
     progressFraction: Float,
     isCompleted: Boolean,
+    downloadState: OfflineDownloadState? = null,
+    onDownloadClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     Box(
@@ -809,6 +819,34 @@ fun EpisodeThumbnailCard(
                 tint = Color.Black,
                 modifier = Modifier.padding(5.dp)
             )
+        }
+        if (onDownloadClick != null) {
+            Surface(
+                color = when (downloadState) {
+                    OfflineDownloadState.COMPLETED -> AniGreen
+                    OfflineDownloadState.DOWNLOADING, OfflineDownloadState.QUEUED -> AniGreen.copy(alpha = 0.85f)
+                    else -> Color.Black.copy(alpha = 0.6f)
+                },
+                shape = CircleShape,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .size(26.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onDownloadClick)
+                    .testTag("episode_download_badge_$episodeNumber")
+            ) {
+                Icon(
+                    imageVector = if (downloadState == OfflineDownloadState.COMPLETED) {
+                        Icons.Default.CheckCircle
+                    } else {
+                        Icons.Default.Download
+                    },
+                    contentDescription = "Download Episode $episodeNumber",
+                    tint = Color.White,
+                    modifier = Modifier.padding(5.dp)
+                )
+            }
         }
         if (isCompleted) {
             Icon(

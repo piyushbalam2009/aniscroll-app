@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
@@ -62,8 +63,12 @@ import com.example.core.designsystem.GreenPrimaryButton
 import com.example.core.designsystem.SelectablePillChip
 import com.example.core.designsystem.SpinningDotsLoader
 import com.example.domain.model.Anime
+import com.example.domain.model.HlsPlaylistInspection
+import com.example.domain.model.HlsQualityVariant
+import com.example.domain.model.OfflineDownloadItem
 import com.example.domain.model.WatchStatus
 import com.example.feature.details.GiveRatingBottomSheet
+import com.example.feature.details.HlsDownloadEpisodeSheet
 import com.example.feature.details.OutlinedMetaBadge
 import com.example.feature.details.ShareBottomSheet
 import com.example.feature.details.WatchlistStatusBottomSheet
@@ -76,6 +81,7 @@ import com.example.ui.theme.AniTextSecondary
 fun MovieDetailsScreen(
     state: AppResult<Anime>,
     inWatchlist: Boolean,
+    movieDownloadsMap: Map<Int, OfflineDownloadItem> = emptyMap(),
     personalRating: Float?,
     defaultAudioType: String,
     onBack: () -> Unit,
@@ -83,6 +89,16 @@ fun MovieDetailsScreen(
     onToggleWatchlist: (Anime) -> Unit,
     onSetWatchStatus: (Anime, WatchStatus) -> Unit,
     onSaveRating: (Float) -> Unit,
+    onInspectEpisodeDownload: suspend (Anime, Int, String) -> AppResult<HlsPlaylistInspection> = { _, _, _ ->
+        AppResult.Error("Offline download inspector not configured.")
+    },
+    onStartEpisodeDownload: suspend (HlsPlaylistInspection, HlsQualityVariant) -> AppResult<OfflineDownloadItem> = { _, _ ->
+        AppResult.Error("Offline download manager not configured.")
+    },
+    onPauseDownload: (String) -> Unit = {},
+    onResumeDownload: (String) -> Unit = {},
+    onCancelOrDeleteDownload: (String) -> Unit = {},
+    onOpenDownloadsScreen: () -> Unit = {},
     onAnimeClick: (Anime) -> Unit,
     onRetry: () -> Unit
 ) {
@@ -93,6 +109,7 @@ fun MovieDetailsScreen(
     var showRatingSheet by remember { mutableStateOf(false) }
     var showShareSheet by remember { mutableStateOf(false) }
     var showStatusSheet by remember { mutableStateOf(false) }
+    var showDownloadSheet by remember { mutableStateOf(false) }
 
     when (state) {
         is AppResult.Loading -> {
@@ -274,11 +291,13 @@ fun MovieDetailsScreen(
                                 testTag = "play_movie_button"
                             )
                             GreenOutlinedButton(
-                                text = if (inWatchlist) "In My List" else "Add to List",
-                                onClick = { onToggleWatchlist(movie) },
+                                text = "Download",
+                                icon = Icons.Default.Download,
+                                onClick = { showDownloadSheet = true },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(48.dp)
+                                    .height(48.dp),
+                                testTag = "download_movie_button"
                             )
                         }
 
@@ -419,6 +438,28 @@ fun MovieDetailsScreen(
                         onToggleWatchlist(movie)
                         showStatusSheet = false
                     }
+                )
+            }
+
+            if (showDownloadSheet) {
+                HlsDownloadEpisodeSheet(
+                    anime = movie,
+                    initialEpisode = 1,
+                    initialAudioType = selectedAudioType,
+                    existingDownloads = movieDownloadsMap,
+                    onInspectEpisodeDownload = onInspectEpisodeDownload,
+                    onStartEpisodeDownload = onStartEpisodeDownload,
+                    onPauseDownload = onPauseDownload,
+                    onResumeDownload = onResumeDownload,
+                    onCancelOrDeleteDownload = onCancelOrDeleteDownload,
+                    onPlayOfflineEpisode = { _, audioType ->
+                        onPlayMovie(audioType, movie.displayTitle)
+                    },
+                    onStreamOnlineEpisode = { _, audioType ->
+                        onPlayMovie(audioType, movie.displayTitle)
+                    },
+                    onOpenDownloadsScreen = onOpenDownloadsScreen,
+                    onDismiss = { showDownloadSheet = false }
                 )
             }
         }

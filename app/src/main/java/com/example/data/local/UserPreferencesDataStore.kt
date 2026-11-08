@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.domain.model.UserPreferencesState
+import com.example.domain.model.VideoDisplayMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -22,6 +23,7 @@ class UserPreferencesDataStore(private val context: Context) {
         val DEFAULT_AUDIO_TYPE = stringPreferencesKey("default_audio_type")
         val DEFAULT_PLAYBACK_SPEED = floatPreferencesKey("default_playback_speed")
         val DEFAULT_VIDEO_QUALITY = stringPreferencesKey("default_video_quality")
+        val DEFAULT_DISPLAY_MODE = stringPreferencesKey("default_display_mode")
         val AUTO_PLAY_NEXT = booleanPreferencesKey("auto_play_next")
         val REMEMBER_POSITION = booleanPreferencesKey("remember_position")
         val SUBTITLE_FONT_SIZE = floatPreferencesKey("subtitle_font_size")
@@ -43,6 +45,7 @@ class UserPreferencesDataStore(private val context: Context) {
             defaultAudioType = prefs[Keys.DEFAULT_AUDIO_TYPE] ?: "sub",
             defaultPlaybackSpeed = prefs[Keys.DEFAULT_PLAYBACK_SPEED] ?: 1.0f,
             defaultVideoQuality = prefs[Keys.DEFAULT_VIDEO_QUALITY] ?: "Auto (1080p)",
+            defaultDisplayMode = VideoDisplayMode.fromNameOrDefault(prefs[Keys.DEFAULT_DISPLAY_MODE]),
             autoPlayNextEpisode = prefs[Keys.AUTO_PLAY_NEXT] ?: true,
             rememberPlaybackPosition = prefs[Keys.REMEMBER_POSITION] ?: true,
             subtitleFontSizeSp = prefs[Keys.SUBTITLE_FONT_SIZE] ?: 18f,
@@ -79,6 +82,14 @@ class UserPreferencesDataStore(private val context: Context) {
 
     suspend fun setDefaultVideoQuality(quality: String) {
         context.dataStore.edit { it[Keys.DEFAULT_VIDEO_QUALITY] = quality }
+    }
+
+    suspend fun setDefaultDisplayMode(mode: VideoDisplayMode) {
+        context.dataStore.edit { it[Keys.DEFAULT_DISPLAY_MODE] = mode.name }
+    }
+
+    suspend fun resetDisplayModeToFit() {
+        context.dataStore.edit { it[Keys.DEFAULT_DISPLAY_MODE] = VideoDisplayMode.FIT.name }
     }
 
     suspend fun setAutoPlayNextEpisode(enabled: Boolean) {
